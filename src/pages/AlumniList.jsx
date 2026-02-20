@@ -1,0 +1,212 @@
+import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Filter, MapPin, Building2, GraduationCap, MessageCircle, Calendar, X } from 'lucide-react';
+import { alumniList, industryList, universityList } from '../data/alumni';
+import { useApp } from '../context/AppContext';
+
+const dataLevelBadge = {
+  full: { label: '詳細', color: 'bg-primary-100 text-primary-700' },
+  medium: { label: '標準', color: 'bg-blue-100 text-blue-700' },
+  minimal: { label: '基本', color: 'bg-gray-100 text-gray-500' },
+};
+
+export default function AlumniList() {
+  const navigate = useNavigate();
+  const { role, openInterviewModal } = useApp();
+  const [search, setSearch] = useState('');
+  const [filterIndustry, setFilterIndustry] = useState('');
+  const [filterUniversity, setFilterUniversity] = useState('');
+  const [filterMentor, setFilterMentor] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
+
+  const filtered = useMemo(() => {
+    return alumniList.filter(a => {
+      const q = search.toLowerCase();
+      const matchSearch = !q || a.name.includes(search) || a.nameKana.includes(q) ||
+        a.currentCompany.toLowerCase().includes(q) || a.currentRole.toLowerCase().includes(q) ||
+        a.university.toLowerCase().includes(q) || a.faculty.toLowerCase().includes(q) ||
+        a.tags.some(t => t.toLowerCase().includes(q));
+      const matchIndustry = !filterIndustry || a.industry === filterIndustry;
+      const matchUniversity = !filterUniversity || a.university === filterUniversity;
+      const matchMentor = !filterMentor || a.canMentor;
+      return matchSearch && matchIndustry && matchUniversity && matchMentor;
+    });
+  }, [search, filterIndustry, filterUniversity, filterMentor]);
+
+  const hasFilter = filterIndustry || filterUniversity || filterMentor;
+
+  return (
+    <div>
+      {/* Page Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">キャリア台帳</h1>
+        <p className="text-gray-500 text-sm mt-1">卒業生 {alumniList.length}名のキャリア情報</p>
+      </div>
+
+      {/* Search & Filter Bar */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-5">
+        <div className="flex gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="名前・企業・大学・職種で検索..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setShowFilter(!showFilter)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+              hasFilter ? 'bg-primary-50 border-primary-300 text-primary-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            <span>絞り込み</span>
+            {hasFilter && <span className="w-2 h-2 rounded-full bg-primary-500" />}
+          </button>
+        </div>
+
+        {showFilter && (
+          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">業界</label>
+              <select
+                value={filterIndustry}
+                onChange={e => setFilterIndustry(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+              >
+                <option value="">すべて</option>
+                {industryList.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">大学</label>
+              <select
+                value={filterUniversity}
+                onChange={e => setFilterUniversity(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+              >
+                <option value="">すべて</option>
+                {universityList.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={filterMentor}
+                  onChange={e => setFilterMentor(e.target.checked)}
+                  className="w-4 h-4 accent-primary-600"
+                />
+                <span className="text-sm text-gray-700">メンター可のみ</span>
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Results Count */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-gray-500">
+          <span className="font-semibold text-gray-800">{filtered.length}</span>件表示
+        </p>
+        {hasFilter && (
+          <button
+            onClick={() => { setFilterIndustry(''); setFilterUniversity(''); setFilterMentor(false); }}
+            className="text-xs text-primary-600 hover:underline"
+          >
+            絞り込みをリセット
+          </button>
+        )}
+      </div>
+
+      {/* Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filtered.map(alumni => (
+          <AlumniCard
+            key={alumni.id}
+            alumni={alumni}
+            role={role}
+            onView={() => navigate(`/alumni/${alumni.id}`)}
+            onInterview={() => openInterviewModal(alumni)}
+          />
+        ))}
+        {filtered.length === 0 && (
+          <div className="col-span-3 text-center py-16 text-gray-400">
+            <Search className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p>検索結果がありません</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AlumniCard({ alumni, role, onView, onInterview }) {
+  const badge = dataLevelBadge[alumni.dataLevel];
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow p-5 flex flex-col">
+      <div className="flex items-start gap-3 mb-4">
+        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white font-bold text-lg shrink-0">
+          {alumni.name.charAt(0)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 text-sm truncate">{alumni.name}</h3>
+            <span className={`badge text-xs shrink-0 ${badge.color}`}>{badge.label}</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-0.5">{alumni.nameKana}</p>
+        </div>
+      </div>
+
+      <div className="space-y-2 flex-1">
+        <div className="flex items-start gap-2">
+          <Building2 className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-xs font-medium text-gray-800 leading-snug">{alumni.currentRole}</p>
+            <p className="text-xs text-gray-500">{alumni.currentCompany}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <GraduationCap className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <p className="text-xs text-gray-600">{alumni.university} {alumni.faculty}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <p className="text-xs text-gray-500">{alumni.location}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mt-3">
+        {alumni.tags.slice(0, 3).map(tag => (
+          <span key={tag} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{tag}</span>
+        ))}
+      </div>
+
+      <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
+        <button
+          onClick={onView}
+          className="flex-1 text-xs font-medium py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+        >
+          詳細を見る
+        </button>
+        {role === 'student' && alumni.canMentor && (
+          <button
+            onClick={onInterview}
+            className="flex items-center gap-1 px-3 py-2 text-xs font-medium rounded-lg border border-primary-200 text-primary-700 hover:bg-primary-50 transition-colors"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            面談
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
