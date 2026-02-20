@@ -8,6 +8,7 @@ import Chat from './pages/Chat';
 import LectureRequest from './pages/LectureRequest';
 import Feedback from './pages/Feedback';
 import Contents from './pages/Contents';
+import UniversityMindMap from './pages/UniversityMindMap';
 import { useApp } from './context/AppContext';
 
 function AppRoutes() {
@@ -18,6 +19,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<AlumniList />} />
         <Route path="/alumni/:id" element={<AlumniDetail />} />
+        <Route path="/university-map" element={<UniversityMindMap />} />
         {role === 'student' && (
           <Route path="/chat" element={<Chat />} />
         )}

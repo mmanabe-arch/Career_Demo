@@ -75,17 +75,20 @@ export default function Layout({ children }) {
 function SubNav({ role, currentPath, navigate }) {
   const studentNav = [
     { label: 'キャリア台帳', path: '/' },
+    { label: '進学マップ', path: '/university-map' },
     { label: 'チャット', path: '/chat' },
     { label: 'コンテンツ', path: '/contents' },
   ];
   const teacherNav = [
     { label: 'キャリア台帳', path: '/' },
+    { label: '進学マップ', path: '/university-map' },
     { label: '講演依頼', path: '/lecture-request' },
     { label: 'フィードバック管理', path: '/feedback' },
     { label: 'コンテンツ', path: '/contents' },
   ];
   const alumniNav = [
     { label: 'キャリア台帳', path: '/' },
+    { label: '進学マップ', path: '/university-map' },
     { label: 'コンテンツ', path: '/contents' },
   ];
 
