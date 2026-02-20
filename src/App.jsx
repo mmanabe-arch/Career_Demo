@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import Layout from './components/Layout';
 import InterviewModal from './components/InterviewModal';
+import TutoringModal from './components/TutoringModal';
 import AlumniList from './pages/AlumniList';
 import AlumniDetail from './pages/AlumniDetail';
 import Chat from './pages/Chat';
@@ -33,6 +34,7 @@ function AppRoutes() {
         <Route path="*" element={<AlumniList />} />
       </Routes>
       <InterviewModal />
+      <TutoringModal />
     </Layout>
   );
 }

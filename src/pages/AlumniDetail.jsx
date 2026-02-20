@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Building2, GraduationCap, MapPin, Calendar,
-  MessageCircle, BookOpen, Briefcase, ChevronRight
+  BookOpen, Briefcase, Tag
 } from 'lucide-react';
 import { alumniList } from '../data/alumni';
 import { useApp } from '../context/AppContext';
@@ -30,7 +30,7 @@ function getTextColor(score) {
 export default function AlumniDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { role, openInterviewModal } = useApp();
+  const { role, openInterviewModal, openTutoringModal } = useApp();
   const [activeTab, setActiveTab] = useState('school');
 
   const alumni = alumniList.find(a => a.id === Number(id));
@@ -44,10 +44,12 @@ export default function AlumniDetail() {
     );
   }
 
+  const isUniversity = alumni.status === 'university';
+
   const tabs = [
     { key: 'school', label: '在校時代', icon: BookOpen, available: !!alumni.schoolDays },
-    { key: 'university', label: '大学時代', icon: GraduationCap, available: !!alumni.universityDays },
-    { key: 'career', label: '社会人キャリア', icon: Briefcase, available: true },
+    { key: 'university', label: isUniversity ? '大学生活' : '大学時代', icon: GraduationCap, available: !!alumni.universityDays },
+    ...(!isUniversity ? [{ key: 'career', label: '社会人キャリア', icon: Briefcase, available: true }] : []),
   ];
 
   return (
@@ -62,20 +64,27 @@ export default function AlumniDetail() {
       </button>
 
       {/* Profile Header */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-5">
+      <div className={`bg-white rounded-2xl border shadow-sm p-6 mb-5 ${isUniversity ? 'border-amber-100' : 'border-gray-100'}`}>
         <div className="flex flex-col sm:flex-row gap-5 items-start">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-700 flex items-center justify-center text-white font-bold text-3xl shrink-0">
+          <div className={`w-20 h-20 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shrink-0 ${
+            isUniversity
+              ? 'bg-gradient-to-br from-amber-400 to-amber-600'
+              : 'bg-gradient-to-br from-primary-400 to-primary-700'
+          }`}>
             {alumni.name.charAt(0)}
           </div>
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3 mb-1">
               <h1 className="text-2xl font-bold text-gray-900">{alumni.name}</h1>
               <span className="text-sm text-gray-400">{alumni.nameKana}</span>
-              <span className="badge bg-primary-100 text-primary-700">{alumni.graduationYear}年卒</span>
+              {isUniversity && <span className="badge bg-amber-100 text-amber-700">大学生</span>}
+              <span className={`badge ${isUniversity ? 'bg-amber-100 text-amber-700' : 'bg-primary-100 text-primary-700'}`}>
+                {alumni.graduationYear}年卒
+              </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1.5 gap-x-6 mt-3">
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Briefcase className="w-4 h-4 text-gray-400" />
+                {isUniversity ? <GraduationCap className="w-4 h-4 text-amber-400" /> : <Briefcase className="w-4 h-4 text-gray-400" />}
                 <span className="font-medium">{alumni.currentRole}</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -98,17 +107,37 @@ export default function AlumniDetail() {
               {alumni.tags.map(tag => (
                 <span key={tag} className="badge bg-gray-100 text-gray-600">{tag}</span>
               ))}
+              {isUniversity && alumni.tutorSubjects?.map(s => (
+                <span key={s} className="badge bg-amber-100 text-amber-700 flex items-center gap-1">
+                  <Tag className="w-3 h-3" />{s}
+                </span>
+              ))}
             </div>
           </div>
-          {role === 'student' && alumni.canMentor && (
-            <button
-              onClick={() => openInterviewModal(alumni)}
-              className="flex items-center gap-2 btn-primary shrink-0"
-            >
-              <Calendar className="w-4 h-4" />
-              面談を申し込む
-            </button>
-          )}
+          {/* アクションボタン群 */}
+          <div className="flex flex-col gap-2 shrink-0">
+            {role === 'student' && !isUniversity && alumni.canMentor && (
+              <button
+                onClick={() => openInterviewModal(alumni)}
+                className="flex items-center gap-2 btn-primary"
+              >
+                <Calendar className="w-4 h-4" />
+                面談を申し込む
+              </button>
+            )}
+            {role === 'student' && isUniversity && alumni.canTutor && (
+              <button
+                onClick={() => openTutoringModal(alumni)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-white transition-colors"
+                style={{ background: '#f59e0b' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#d97706'}
+                onMouseLeave={e => e.currentTarget.style.background = '#f59e0b'}
+              >
+                <BookOpen className="w-4 h-4" />
+                家庭教師を申し込む
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

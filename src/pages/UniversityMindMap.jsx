@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, GraduationCap, Building2, MapPin, Calendar, Users, ChevronRight } from 'lucide-react';
+import { X, GraduationCap, Building2, Calendar, Users, ChevronRight, BookOpen } from 'lucide-react';
 import { alumniList } from '../data/alumni';
 import { useApp } from '../context/AppContext';
 
@@ -44,7 +44,7 @@ function getCurvePath(x1, y1, x2, y2) {
 
 export default function UniversityMindMap() {
   const navigate = useNavigate();
-  const { role, openInterviewModal } = useApp();
+  const { role, openInterviewModal, openTutoringModal } = useApp();
   const [selected, setSelected] = useState(null);
   const containerRef = useRef(null);
   const [size, setSize] = useState({ w: 800, h: 540 });
@@ -299,7 +299,7 @@ export default function UniversityMindMap() {
                             {alumni.graduationYear}年卒
                           </span>
                         </div>
-                        {role === 'student' && alumni.canMentor && (
+                        {role === 'student' && alumni.status !== 'university' && alumni.canMentor && (
                           <button
                             onClick={e => { e.stopPropagation(); openInterviewModal(alumni); }}
                             className="mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium border transition-colors"
@@ -307,6 +307,15 @@ export default function UniversityMindMap() {
                           >
                             <Calendar className="w-3 h-3" />
                             面談を申し込む
+                          </button>
+                        )}
+                        {role === 'student' && alumni.status === 'university' && alumni.canTutor && (
+                          <button
+                            onClick={e => { e.stopPropagation(); openTutoringModal(alumni); }}
+                            className="mt-2 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors"
+                          >
+                            <BookOpen className="w-3 h-3" />
+                            家庭教師を申し込む
                           </button>
                         )}
                       </div>
