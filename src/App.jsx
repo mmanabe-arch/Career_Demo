@@ -10,6 +10,7 @@ import LectureRequest from './pages/LectureRequest';
 import Feedback from './pages/Feedback';
 import Contents from './pages/Contents';
 import UniversityMindMap from './pages/UniversityMindMap';
+import TutorHub from './pages/TutorHub';
 import { useApp } from './context/AppContext';
 
 function AppRoutes() {
@@ -29,6 +30,9 @@ function AppRoutes() {
             <Route path="/lecture-request" element={<LectureRequest />} />
             <Route path="/feedback" element={<Feedback />} />
           </>
+        )}
+        {role === 'alumni' && (
+          <Route path="/tutor" element={<TutorHub />} />
         )}
         <Route path="/contents" element={<Contents />} />
         <Route path="*" element={<AlumniList />} />

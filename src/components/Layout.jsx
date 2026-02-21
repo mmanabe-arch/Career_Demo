@@ -89,6 +89,7 @@ function SubNav({ role, currentPath, navigate }) {
   const alumniNav = [
     { label: 'キャリア台帳', path: '/' },
     { label: '進学マップ', path: '/university-map' },
+    { label: 'チューター管理', path: '/tutor' },
     { label: 'コンテンツ', path: '/contents' },
   ];
 
