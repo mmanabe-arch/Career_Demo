@@ -12,6 +12,8 @@ import Contents from './pages/Contents';
 import UniversityMindMap from './pages/UniversityMindMap';
 import TutorHub from './pages/TutorHub';
 import GoalManagement from './pages/GoalManagement';
+import AlumniChat from './pages/AlumniChat';
+import StudentList from './pages/StudentList';
 import { useApp } from './context/AppContext';
 
 function AppRoutes() {
@@ -36,7 +38,11 @@ function AppRoutes() {
           </>
         )}
         {role === 'alumni' && (
-          <Route path="/tutor" element={<TutorHub />} />
+          <>
+            <Route path="/tutor" element={<TutorHub />} />
+            <Route path="/alumni-chat" element={<AlumniChat />} />
+            <Route path="/students" element={<StudentList />} />
+          </>
         )}
         <Route path="/contents" element={<Contents />} />
         <Route path="*" element={<AlumniList />} />
