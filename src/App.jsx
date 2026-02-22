@@ -11,6 +11,7 @@ import Feedback from './pages/Feedback';
 import Contents from './pages/Contents';
 import UniversityMindMap from './pages/UniversityMindMap';
 import TutorHub from './pages/TutorHub';
+import GoalManagement from './pages/GoalManagement';
 import { useApp } from './context/AppContext';
 
 function AppRoutes() {
@@ -23,7 +24,10 @@ function AppRoutes() {
         <Route path="/alumni/:id" element={<AlumniDetail />} />
         <Route path="/university-map" element={<UniversityMindMap />} />
         {role === 'student' && (
-          <Route path="/chat" element={<Chat />} />
+          <>
+            <Route path="/goals" element={<GoalManagement />} />
+            <Route path="/chat" element={<Chat />} />
+          </>
         )}
         {role === 'teacher' && (
           <>

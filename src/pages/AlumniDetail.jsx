@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Building2, GraduationCap, MapPin, Calendar,
-  BookOpen, Briefcase, Tag
+  BookOpen, Briefcase, Tag, Lock,
 } from 'lucide-react';
 import { alumniList } from '../data/alumni';
 import { useApp } from '../context/AppContext';
@@ -21,7 +21,7 @@ function getHeatColor(score, subject) {
   if (score >= 75) return c.high;
   if (score >= 65) return c.mid;
   return c.low;
-};
+}
 
 function getTextColor(score) {
   return score >= 75 ? 'text-white' : score >= 65 ? 'text-gray-700' : 'text-gray-500';
@@ -46,6 +46,39 @@ export default function AlumniDetail() {
 
   const isUniversity = alumni.status === 'university';
 
+  // ===== OBOG 閲覧制限 =====
+  if (role === 'alumni') {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-5 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          一覧に戻る
+        </button>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-5">
+            <Lock className="w-10 h-10 text-gray-400" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-700 mb-2">個人情報保護により閲覧できません</h2>
+          <p className="text-sm text-gray-500 max-w-sm mx-auto leading-relaxed">
+            OB・OGが登録した詳細情報（経歴・体験談・連絡先など）は、個人情報保護の観点から他のOB・OGには公開されていません。
+          </p>
+          <div className="mt-8 inline-block bg-gray-50 border border-gray-200 rounded-xl px-6 py-4 text-left">
+            <p className="text-sm font-bold text-gray-800">{alumni.name}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{alumni.university} · {alumni.graduationYear}年卒</p>
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {alumni.tags.map(tag => (
+                <span key={tag} className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{tag}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const tabs = [
     { key: 'school', label: '在校時代', icon: BookOpen, available: !!alumni.schoolDays },
     { key: 'university', label: isUniversity ? '大学生活' : '大学時代', icon: GraduationCap, available: !!alumni.universityDays },
@@ -54,7 +87,6 @@ export default function AlumniDetail() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Back Button */}
       <button
         onClick={() => navigate('/')}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-5 transition-colors"
@@ -114,7 +146,6 @@ export default function AlumniDetail() {
               ))}
             </div>
           </div>
-          {/* アクションボタン群 */}
           <div className="flex flex-col gap-2 shrink-0">
             {role === 'student' && !isUniversity && alumni.canMentor && (
               <button
@@ -172,9 +203,7 @@ export default function AlumniDetail() {
 }
 
 function SchoolTab({ alumni }) {
-  if (!alumni.schoolDays) {
-    return <EmptyState message="在校時代のデータがありません" />;
-  }
+  if (!alumni.schoolDays) return <EmptyState message="在校時代のデータがありません" />;
   const { clubs, testimonial, mockExamResults } = alumni.schoolDays;
   const subjects = ['japanese', 'math', 'english', 'science', 'social'];
 
@@ -211,9 +240,7 @@ function SchoolTab({ alumni }) {
                 <tr>
                   <th className="text-left pr-3 py-2 text-gray-500 font-medium w-24">時期</th>
                   {subjects.map(s => (
-                    <th key={s} className="px-2 py-2 text-gray-500 font-medium text-center">
-                      {subjectLabels[s]}
-                    </th>
+                    <th key={s} className="px-2 py-2 text-gray-500 font-medium text-center">{subjectLabels[s]}</th>
                   ))}
                   <th className="px-2 py-2 text-gray-500 font-medium text-center">総合</th>
                 </tr>
@@ -246,18 +273,9 @@ function SchoolTab({ alumni }) {
             </table>
           </div>
           <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#16a34a' }} />
-              <span>75以上</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#86efac' }} />
-              <span>65〜74</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-4 rounded" style={{ backgroundColor: '#dcfce7' }} />
-              <span>64以下</span>
-            </div>
+            <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded" style={{ backgroundColor: '#16a34a' }} /><span>75以上</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded" style={{ backgroundColor: '#86efac' }} /><span>65〜74</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded" style={{ backgroundColor: '#dcfce7' }} /><span>64以下</span></div>
           </div>
         </div>
       )}
@@ -266,9 +284,7 @@ function SchoolTab({ alumni }) {
 }
 
 function UniversityTab({ alumni }) {
-  if (!alumni.universityDays) {
-    return <EmptyState message="大学時代のデータがありません" />;
-  }
+  if (!alumni.universityDays) return <EmptyState message="大学時代のデータがありません" />;
   const { research, activities, testimony } = alumni.universityDays;
   return (
     <div className="space-y-6">
@@ -299,9 +315,7 @@ function UniversityTab({ alumni }) {
 }
 
 function CareerTab({ alumni }) {
-  if (!alumni.career || alumni.career.length === 0) {
-    return <EmptyState message="職歴データがありません" />;
-  }
+  if (!alumni.career || alumni.career.length === 0) return <EmptyState message="職歴データがありません" />;
   return (
     <div>
       <div className="relative pl-6">

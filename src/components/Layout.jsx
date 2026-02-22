@@ -76,6 +76,7 @@ function SubNav({ role, currentPath, navigate }) {
   const studentNav = [
     { label: 'キャリア台帳', path: '/' },
     { label: '進学マップ', path: '/university-map' },
+    { label: '目標管理', path: '/goals' },
     { label: 'チャット', path: '/chat' },
     { label: 'コンテンツ', path: '/contents' },
   ];
