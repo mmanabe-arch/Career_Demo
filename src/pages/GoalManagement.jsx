@@ -1,928 +1,647 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Target, Plus, Trash2, ChevronDown, ChevronRight, ChevronLeft,
-  BarChart2, BookOpen, Calendar, Edit3, Check, RotateCcw, Map,
-  Trophy, ClipboardList, X,
+  Plus, Trash2, ChevronLeft, ChevronRight, Check, X,
+  Trophy, ClipboardList, Calendar, Users, BarChart2,
 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 
-// ================================================================
-//  Utilities
-// ================================================================
+/* ── Utilities ───────────────────────────────────────────── */
 
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-function getISOWeek(date) {
-  const d = new Date(date.valueOf());
-  const dayNum = d.getDay() || 7;
-  d.setDate(d.getDate() + 4 - dayNum);
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+function formatDateJP(s) {
+  const d = new Date(s + 'T00:00:00');
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${'日月火水木金土'[d.getDay()]}）`;
 }
 
-function getWeekMonday(year, week) {
-  const jan1 = new Date(year, 0, 1);
-  const jan1Day = jan1.getDay() || 7;
-  const daysToFirstMonday = jan1Day <= 4 ? 1 - jan1Day : 8 - jan1Day;
-  const firstMonday = new Date(year, 0, 1 + daysToFirstMonday);
-  const monday = new Date(firstMonday);
-  monday.setDate(firstMonday.getDate() + (week - 1) * 7);
-  return monday;
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const t = new Date(dateStr + 'T00:00:00');
+  const n = new Date(); n.setHours(0,0,0,0);
+  return Math.ceil((t - n) / 86400000);
 }
 
-function toDateStr(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
+/* ── Storage ─────────────────────────────────────────────── */
 
-function formatDateJP(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  const dow = '日月火水木金土'[d.getDay()];
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${dow}）`;
-}
+const EXAM_KEY   = 'career-exams-v2';
+const HW_KEY     = 'career-homework-v1';
+const MOCKEX_KEY = 'career-mockexams-v1';
 
-const MONTHS_JP = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+const load = (key, fb) => { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fb)); } catch { return fb; } };
 
-function calcProgress(tasks = []) {
-  const all = flatTasks(tasks);
-  if (!all.length) return null;
-  return Math.round(all.filter(t => t.done).length / all.length * 100);
-}
-
-function flatTasks(tasks = []) {
-  return tasks.flatMap(t => [t, ...flatTasks(t.children)]);
-}
-
-function updateTaskNode(tasks, id, fn) {
-  return tasks.map(t =>
-    t.id === id ? fn(t) : { ...t, children: updateTaskNode(t.children || [], id, fn) }
-  );
-}
-
-function deleteTaskNode(tasks, id) {
-  return tasks
-    .filter(t => t.id !== id)
-    .map(t => ({ ...t, children: deleteTaskNode(t.children || [], id) }));
-}
-
-function addChildNode(tasks, parentId) {
-  return tasks.map(t => {
-    if (t.id === parentId) {
-      return { ...t, children: [...(t.children || []), { id: uid(), title: '', done: false, children: [] }] };
-    }
-    return { ...t, children: addChildNode(t.children || [], parentId) };
-  });
-}
-
-// ================================================================
-//  Storage
-// ================================================================
-
-const STORAGE_KEY      = 'career-goals-v1';
-const EXAM_STORAGE_KEY = 'career-exams-v1';
-const HW_STORAGE_KEY   = 'career-homework-v1';
-
-function loadGoals() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
-  catch { return {}; }
-}
-
-function loadExams() {
-  try { return JSON.parse(localStorage.getItem(EXAM_STORAGE_KEY) || '{}'); }
-  catch { return {}; }
-}
-
-function loadHomework() {
-  try { return JSON.parse(localStorage.getItem(HW_STORAGE_KEY) || '{}'); }
-  catch { return {}; }
-}
-
-// ================================================================
-//  Constants
-// ================================================================
+/* ── Constants ───────────────────────────────────────────── */
 
 const DEFAULT_SUBJECTS = ['国語', '数学', '英語', '理科', '社会'];
 const HW_SUBJECTS = ['国語', '数学', '英語', '理科', '社会', '体育', '音楽', '美術', '技家', 'その他'];
 
-const PRESET_EXAMS = [
-  { id: '1st-mid',   label: '1学期 中間テスト' },
-  { id: '1st-final', label: '1学期 期末テスト' },
-  { id: '2nd-mid',   label: '2学期 中間テスト' },
-  { id: '2nd-final', label: '2学期 期末テスト' },
-  { id: 'year-end',  label: '学年末テスト' },
+const EXAMS = [
+  { id: '1st-mid',   label: '1学期 中間' },
+  { id: '1st-final', label: '1学期 期末' },
+  { id: '2nd-mid',   label: '2学期 中間' },
+  { id: '2nd-final', label: '2学期 期末' },
+  { id: 'year-end',  label: '学年末' },
 ];
 
-const SUBJECT_COLORS = [
-  { bg: 'bg-blue-100',   text: 'text-blue-700' },
-  { bg: 'bg-green-100',  text: 'text-green-700' },
-  { bg: 'bg-purple-100', text: 'text-purple-700' },
-  { bg: 'bg-orange-100', text: 'text-orange-700' },
-  { bg: 'bg-pink-100',   text: 'text-pink-700' },
-  { bg: 'bg-teal-100',   text: 'text-teal-700' },
-  { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  { bg: 'bg-red-100',    text: 'text-red-700' },
-  { bg: 'bg-indigo-100', text: 'text-indigo-700' },
-  { bg: 'bg-cyan-100',   text: 'text-cyan-700' },
+const SC = [
+  { bg:'bg-blue-100',   tx:'text-blue-700',   bar:'#3b82f6' },
+  { bg:'bg-green-100',  tx:'text-green-700',  bar:'#22c55e' },
+  { bg:'bg-purple-100', tx:'text-purple-700', bar:'#a855f7' },
+  { bg:'bg-orange-100', tx:'text-orange-700', bar:'#f97316' },
+  { bg:'bg-pink-100',   tx:'text-pink-700',   bar:'#ec4899' },
+  { bg:'bg-teal-100',   tx:'text-teal-700',   bar:'#14b8a6' },
+  { bg:'bg-yellow-100', tx:'text-yellow-700', bar:'#eab308' },
+  { bg:'bg-red-100',    tx:'text-red-700',    bar:'#ef4444' },
 ];
+const sc = i => SC[i % SC.length];
 
-function getSubjectColor(index) {
-  return SUBJECT_COLORS[index % SUBJECT_COLORS.length];
-}
+// Mock senior scores for comparison
+const SENIOR = {
+  '1st-mid':   { '国語':74, '数学':68, '英語':79, '理科':71, '社会':80 },
+  '1st-final': { '国語':76, '数学':72, '英語':81, '理科':74, '社会':82 },
+  '2nd-mid':   { '国語':77, '数学':75, '英語':83, '理科':76, '社会':79 },
+  '2nd-final': { '国語':79, '数学':78, '英語':85, '理科':79, '社会':80 },
+  'year-end':  { '国語':82, '数学':82, '英語':87, '理科':81, '社会':83 },
+};
 
-// ================================================================
-//  Empty data factories
-// ================================================================
+// Mock school average
+const SCHOOL_AVG = {
+  '1st-mid':   { '国語':68, '数学':60, '英語':65, '理科':62, '社会':66 },
+  '1st-final': { '国語':70, '数学':63, '英語':67, '理科':64, '社会':68 },
+  '2nd-mid':   { '国語':69, '数学':61, '英語':66, '理科':63, '社会':67 },
+  '2nd-final': { '国語':71, '数学':64, '英語':68, '理科':65, '社会':69 },
+  'year-end':  { '国語':72, '数学':66, '英語':70, '理科':67, '社会':71 },
+};
 
-function emptyGoal() {
-  return { title: '', description: '', tasks: [], reflection: '', reflectionDate: '' };
-}
+const TABS = [
+  { key:'exam',   label:'定期テスト', icon: Trophy       },
+  { key:'hw',     label:'宿題',       icon: ClipboardList },
+  { key:'mockex', label:'模試予定',   icon: Calendar      },
+];
 
 function emptyExam() {
   return {
-    goal: '',
-    description: '',
-    subjects: DEFAULT_SUBJECTS.map(name => ({ id: uid(), name, current: '', target: '' })),
-    tasks: [],
-    reflection: '',
-    reflectionDate: '',
+    date: '', goal: '',
+    subjects: DEFAULT_SUBJECTS.map(n => ({
+      id: uid(), name: n, target:'', score:'', scope:'', todos:[],
+    })),
   };
 }
 
-// ================================================================
-//  Tab config
-// ================================================================
-
-const TABS = [
-  { key: 'yearly',     label: '年次',       icon: Target },
-  { key: 'monthly',   label: '月次',       icon: Calendar },
-  { key: 'weekly',    label: '週次',       icon: BarChart2 },
-  { key: 'exam',      label: '定期テスト',  icon: Trophy },
-  { key: 'homework',  label: '宿題',       icon: ClipboardList },
-  { key: 'overview',  label: '全体MAP',    icon: Map },
-  { key: 'reflection',label: '振り返り',    icon: RotateCcw },
-];
-
-const TYPE_STYLE = {
-  yearly:  { label: '年次目標',  badge: 'bg-green-100 text-green-700',   ring: 'ring-green-300',  bar: '#16a34a' },
-  monthly: { label: '月次目標',  badge: 'bg-blue-100 text-blue-700',     ring: 'ring-blue-300',   bar: '#2563eb' },
-  weekly:  { label: '週次目標',  badge: 'bg-purple-100 text-purple-700', ring: 'ring-purple-300', bar: '#7c3aed' },
-};
-
-const DEPTH_STYLE = [
-  { indent: '',      line: '',                                            dot: 'bg-primary-500' },
-  { indent: 'ml-6', line: 'border-l-2 border-primary-200 pl-3',         dot: 'bg-blue-400' },
-  { indent: 'ml-6', line: 'border-l-2 border-dashed border-gray-300 pl-3', dot: 'bg-purple-400' },
-];
-
-// ================================================================
-//  Main Page
-// ================================================================
+/* ── Main ────────────────────────────────────────────────── */
 
 export default function GoalManagement() {
-  const today = new Date();
-  const [tab, setTab] = useState('yearly');
-  const [goals,    setGoals]    = useState(loadGoals);
-  const [exams,    setExams]    = useState(loadExams);
-  const [homework, setHomework] = useState(loadHomework);
-  const [selYear,  setSelYear]  = useState(today.getFullYear());
-  const [selMonth, setSelMonth] = useState(today.getMonth() + 1);
-  const [selWeek,  setSelWeek]  = useState(getISOWeek(today));
+  const { role, studentProfile } = useApp();
+  const [tab,    setTab]    = useState('exam');
+  const [exams,  setExams]  = useState(() => load(EXAM_KEY,   {}));
+  const [hw,     setHw]     = useState(() => load(HW_KEY,     {}));
+  const [mockex, setMockex] = useState(() => load(MOCKEX_KEY, []));
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEY,      JSON.stringify(goals));    }, [goals]);
-  useEffect(() => { localStorage.setItem(EXAM_STORAGE_KEY, JSON.stringify(exams));    }, [exams]);
-  useEffect(() => { localStorage.setItem(HW_STORAGE_KEY,   JSON.stringify(homework)); }, [homework]);
+  useEffect(() => { localStorage.setItem(EXAM_KEY,   JSON.stringify(exams));  }, [exams]);
+  useEffect(() => { localStorage.setItem(HW_KEY,     JSON.stringify(hw));     }, [hw]);
+  useEffect(() => { localStorage.setItem(MOCKEX_KEY, JSON.stringify(mockex)); }, [mockex]);
 
-  const yearKey  = String(selYear);
-  const monthKey = `${selYear}-${selMonth}`;
-  const weekKey  = `${selYear}-W${selWeek}`;
-
-  const getGoal = (key) => goals[key] ?? emptyGoal();
-  const setGoal = (key, data) => setGoals(prev => ({ ...prev, [key]: data }));
-
-  const weekMonday = getWeekMonday(selYear, selWeek);
-  const weekSunday = new Date(weekMonday); weekSunday.setDate(weekMonday.getDate() + 6);
-  const weekLabel  = `${weekMonday.getMonth() + 1}/${weekMonday.getDate()} 〜 ${weekSunday.getMonth() + 1}/${weekSunday.getDate()}`;
-
-  const prevMonth = () => selMonth === 1  ? (setSelMonth(12), setSelYear(y => y - 1)) : setSelMonth(m => m - 1);
-  const nextMonth = () => selMonth === 12 ? (setSelMonth(1),  setSelYear(y => y + 1)) : setSelMonth(m => m + 1);
-  const prevWeek  = () => selWeek === 1   ? (setSelWeek(52),  setSelYear(y => y - 1)) : setSelWeek(w => w - 1);
-  const nextWeek  = () => selWeek === 52  ? (setSelWeek(1),   setSelYear(y => y + 1)) : setSelWeek(w => w + 1);
-
-  const props = { getGoal, setGoal };
+  const univ = studentProfile?.targetUniversity || '志望校';
 
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">目標管理</h1>
-        <p className="text-gray-500 text-sm mt-1">年次・月次・週次の目標とタスクを設定・振り返りましょう</p>
+        <p className="text-gray-500 text-sm mt-1">定期テスト・宿題・模試の管理</p>
       </div>
 
-      {/* Tab bar */}
       <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 mb-6 overflow-x-auto">
         {TABS.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
+          <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
               tab === key ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >
-            <Icon className="w-4 h-4" />
-            {label}
+            <Icon className="w-4 h-4" />{label}
           </button>
         ))}
       </div>
 
-      {tab === 'yearly' && (
-        <GoalView
-          type="yearly"
-          goalKey={yearKey}
-          periodLabel={`${selYear}年`}
-          onPrev={() => setSelYear(y => y - 1)}
-          onNext={() => setSelYear(y => y + 1)}
-          {...props}
-        />
-      )}
-      {tab === 'monthly' && (
-        <GoalView
-          type="monthly"
-          goalKey={monthKey}
-          periodLabel={`${selYear}年 ${MONTHS_JP[selMonth - 1]}`}
-          parentLabel={getGoal(yearKey).title ? `年次目標：${getGoal(yearKey).title}` : null}
-          onPrev={prevMonth}
-          onNext={nextMonth}
-          {...props}
-        />
-      )}
-      {tab === 'weekly' && (
-        <GoalView
-          type="weekly"
-          goalKey={weekKey}
-          periodLabel={`${selYear}年 第${selWeek}週（${weekLabel}）`}
-          parentLabel={getGoal(monthKey).title ? `月次目標：${getGoal(monthKey).title}` : null}
-          onPrev={prevWeek}
-          onNext={nextWeek}
-          {...props}
-        />
-      )}
-      {tab === 'exam' && (
-        <ExamView exams={exams} setExams={setExams} />
-      )}
-      {tab === 'homework' && (
-        <HomeworkView homework={homework} setHomework={setHomework} />
-      )}
-      {tab === 'overview' && (
-        <OverviewMap
-          goals={goals}
-          selYear={selYear}
-          onSelectYear={setSelYear}
-          onNavigate={(t, month, week) => {
-            if (month) setSelMonth(month);
-            if (week)  setSelWeek(week);
-            setTab(t);
-          }}
-        />
-      )}
-      {tab === 'reflection' && (
-        <ReflectionView
-          goals={goals}
-          onGoalChange={(key, g) => setGoal(key, g)}
-        />
-      )}
+      {tab === 'exam'   && <ExamView   exams={exams} setExams={setExams} univ={univ} />}
+      {tab === 'hw'     && <HwView     hw={hw}       setHw={setHw}       role={role} />}
+      {tab === 'mockex' && <MockExView mockex={mockex} setMockex={setMockex} />}
     </div>
   );
 }
 
-// ================================================================
-//  GoalView  (shared by yearly / monthly / weekly tabs)
-// ================================================================
+/* ── ExamView ─────────────────────────────────────────────── */
 
-function GoalView({ type, goalKey, periodLabel, parentLabel, onPrev, onNext, getGoal, setGoal }) {
-  const goal = getGoal(goalKey);
-  const ts   = TYPE_STYLE[type];
-  const [editTitle,   setEditTitle]   = useState(false);
-  const [editDesc,    setEditDesc]    = useState(false);
-  const [editReflect, setEditReflect] = useState(false);
+function ExamView({ exams, setExams, univ }) {
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [sel,  setSel]  = useState('1st-mid');
 
-  const update      = (field, val) => setGoal(goalKey, { ...goal, [field]: val });
-  const updateTasks = (tasks)      => setGoal(goalKey, { ...goal, tasks });
-  const progress    = calcProgress(goal.tasks);
+  const key  = `${year}-${sel}`;
+  const exam = exams[key] ?? emptyExam();
+  const name = EXAMS.find(e => e.id === sel)?.label ?? '';
 
-  const addTask = () => {
-    updateTasks([...goal.tasks, { id: uid(), title: '新しいタスク', done: false, children: [] }]);
-  };
+  const upd = (field, val) =>
+    setExams(p => ({ ...p, [key]: { ...(p[key] ?? emptyExam()), [field]: val } }));
 
-  return (
-    <div className="space-y-5 max-w-3xl">
-      {/* Period Selector */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-3">
-        <button onClick={onPrev} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-          <ChevronLeft className="w-5 h-5 text-gray-500" />
-        </button>
-        <div className="text-center">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full mb-1.5 inline-block ${ts.badge}`}>{ts.label}</span>
-          <p className="font-bold text-gray-900 text-sm">{periodLabel}</p>
-          {parentLabel && <p className="text-xs text-gray-400 mt-0.5">{parentLabel}</p>}
-        </div>
-        <button onClick={onNext} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-          <ChevronRight className="w-5 h-5 text-gray-500" />
-        </button>
-      </div>
+  const updSubjs = subjects => upd('subjects', subjects);
+  const updOne   = (id, f, v) => updSubjs(exam.subjects.map(s => s.id === id ? { ...s, [f]: v } : s));
 
-      {/* Goal Card */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="mb-4">
-          <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">目標</label>
-          {editTitle ? (
-            <div className="flex gap-2 mt-1">
-              <input
-                className="flex-1 border border-primary-300 rounded-lg px-3 py-2 text-base font-bold focus:outline-none focus:ring-2 focus:ring-primary-400"
-                value={goal.title}
-                onChange={e => update('title', e.target.value)}
-                placeholder="目標を入力..."
-                autoFocus
-                onBlur={() => setEditTitle(false)}
-                onKeyDown={e => e.key === 'Enter' && setEditTitle(false)}
-              />
-              <button onClick={() => setEditTitle(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <Check className="w-4 h-4 text-primary-600" />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 mt-1 group cursor-pointer" onClick={() => setEditTitle(true)}>
-              {goal.title
-                ? <h2 className="text-xl font-bold text-gray-900 flex-1">{goal.title}</h2>
-                : <p className="text-gray-400 text-base flex-1 italic">クリックして目標を入力...</p>
-              }
-              <Edit3 className="w-4 h-4 text-gray-300 group-hover:text-gray-500 shrink-0" />
-            </div>
-          )}
-        </div>
+  const days    = daysUntil(exam.date);
+  const senior  = SENIOR[sel]      ?? {};
+  const schAvg  = SCHOOL_AVG[sel]  ?? {};
 
-        <div className="mb-4">
-          <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">詳細・背景</label>
-          {editDesc ? (
-            <textarea
-              className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
-              value={goal.description}
-              onChange={e => update('description', e.target.value)}
-              placeholder="目標の背景・理由・具体的な姿を記入..."
-              rows={3}
-              autoFocus
-              onBlur={() => setEditDesc(false)}
-            />
-          ) : (
-            <div className="group cursor-pointer mt-1" onClick={() => setEditDesc(true)}>
-              {goal.description
-                ? <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 leading-relaxed">{goal.description}</p>
-                : <p className="text-sm text-gray-300 italic">+ 詳細・背景を追加...</p>
-              }
-            </div>
-          )}
-        </div>
+  const myTotal  = exam.subjects.filter(s => s.score !== '').reduce((a, s) => a + +s.score, 0);
+  const snTotal  = Object.values(senior).reduce((a, v) => a + v, 0);
+  const avgTotal = Object.values(schAvg).reduce((a, v) => a + v, 0);
+  const hasScore = exam.subjects.some(s => s.score !== '');
 
-        {progress !== null && (
-          <div>
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-gray-500">タスク達成率</span>
-              <span className="font-bold" style={{ color: ts.bar }}>{progress}%</span>
-            </div>
-            <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: ts.bar }} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Tasks */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-900">タスク <span className="text-xs font-normal text-gray-400">（最大3階層）</span></h3>
-          <button
-            onClick={addTask}
-            className="flex items-center gap-1 px-3 py-1.5 bg-primary-50 text-primary-700 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            追加
-          </button>
-        </div>
-
-        {goal.tasks.length === 0 ? (
-          <div className="text-center py-8">
-            <Target className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-            <p className="text-sm text-gray-400">タスクを追加して目標を分解しましょう</p>
-          </div>
-        ) : (
-          <div className="space-y-0.5">
-            {goal.tasks.map(task => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                depth={0}
-                maxDepth={2}
-                onUpdate={(id, fn) => updateTasks(updateTaskNode(goal.tasks, id, fn))}
-                onDelete={(id)     => updateTasks(deleteTaskNode(goal.tasks, id))}
-                onAddChild={(pid)  => updateTasks(addChildNode(goal.tasks, pid))}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Reflection */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <RotateCcw className="w-4 h-4 text-amber-500" />
-          <h3 className="font-bold text-gray-900">振り返り</h3>
-        </div>
-        {editReflect ? (
-          <div className="space-y-2">
-            <textarea
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
-              value={goal.reflection}
-              onChange={e => update('reflection', e.target.value)}
-              placeholder={"この期間を振り返って...\n\n・うまくいったこと\n・改善したいこと\n・次のアクション"}
-              rows={5}
-              autoFocus
-            />
-            <button
-              onClick={() => {
-                update('reflectionDate', new Date().toLocaleDateString('ja-JP'));
-                setEditReflect(false);
-              }}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
-            >
-              保存
-            </button>
-          </div>
-        ) : goal.reflection ? (
-          <div
-            className="bg-amber-50 border border-amber-100 rounded-xl p-4 cursor-pointer hover:bg-amber-100 transition-colors"
-            onClick={() => setEditReflect(true)}
-          >
-            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{goal.reflection}</p>
-            {goal.reflectionDate && <p className="text-xs text-gray-400 mt-2">{goal.reflectionDate} 記録</p>}
-          </div>
-        ) : (
-          <button
-            onClick={() => setEditReflect(true)}
-            className="text-sm text-gray-300 italic hover:text-amber-500 transition-colors"
-          >
-            + 振り返りを記録する...
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ================================================================
-//  TaskItem  (recursive, max depth 3 = 0/1/2)
-// ================================================================
-
-function TaskItem({ task, depth, maxDepth, onUpdate, onDelete, onAddChild }) {
-  const [expanded, setExpanded] = useState(true);
-  const [editing,  setEditing]  = useState(task.title === '');
-  const hasChildren = (task.children?.length ?? 0) > 0;
-  const ds = DEPTH_STYLE[depth] || DEPTH_STYLE[2];
+  // Build chart history
+  const history = useMemo(() => EXAMS.map(({ id, label }) => {
+    const e  = exams[`${year}-${id}`];
+    const my = e?.subjects.some(s => s.score !== '')
+      ? e.subjects.filter(s => s.score !== '').reduce((a, s) => a + +s.score, 0) : null;
+    const sn = Object.values(SENIOR[id] ?? {}).reduce((a, v) => a + v, 0) || null;
+    const av = Object.values(SCHOOL_AVG[id] ?? {}).reduce((a, v) => a + v, 0) || null;
+    return { id, label, my, sn, av };
+  }), [exams, year]);
 
   return (
-    <div className={depth > 0 ? `${ds.indent} ${ds.line} mt-0.5` : ''}>
-      <div className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg hover:bg-gray-50 group">
-        <button
-          onClick={() => setExpanded(e => !e)}
-          className={`w-4 h-4 shrink-0 text-gray-300 ${hasChildren ? 'hover:text-gray-600' : 'opacity-0 pointer-events-none'}`}
-        >
-          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-        </button>
+    <div className="space-y-5 max-w-4xl">
 
-        <button
-          onClick={() => onUpdate(task.id, t => ({ ...t, done: !t.done }))}
-          className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${
-            task.done ? 'bg-primary-500 border-primary-500' : 'border-gray-300 hover:border-primary-400'
-          }`}
-        >
-          {task.done && <Check className="w-3 h-3 text-white" />}
-        </button>
-
-        {editing ? (
-          <input
-            className="flex-1 text-sm border-b border-primary-300 focus:outline-none bg-transparent py-0.5"
-            value={task.title}
-            onChange={e => onUpdate(task.id, t => ({ ...t, title: e.target.value }))}
-            onBlur={() => setEditing(false)}
-            onKeyDown={e => { if (e.key === 'Enter') setEditing(false); }}
-            autoFocus
-          />
-        ) : (
-          <span
-            className={`flex-1 text-sm cursor-text select-text ${task.done ? 'line-through text-gray-400' : 'text-gray-700'}`}
-            onClick={() => setEditing(true)}
-          >
-            {task.title || <span className="text-gray-300 italic">タスク名を入力</span>}
-          </span>
-        )}
-
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {depth < maxDepth && (
-            <button
-              title="サブタスクを追加"
-              onClick={() => { onAddChild(task.id); setExpanded(true); }}
-              className="p-1 text-gray-400 hover:text-primary-600 rounded"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          )}
-          <button onClick={() => onDelete(task.id)} className="p-1 text-gray-400 hover:text-red-500 rounded">
-            <Trash2 className="w-3.5 h-3.5" />
+      {/* Year + Period selector */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <button onClick={() => setYear(y => y-1)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+            <ChevronLeft className="w-4 h-4 text-gray-500" />
+          </button>
+          <span className="font-bold text-gray-900 text-sm">{year}年度</span>
+          <button onClick={() => setYear(y => y+1)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+            <ChevronRight className="w-4 h-4 text-gray-500" />
           </button>
         </div>
-      </div>
-
-      {hasChildren && expanded && (
-        <div className="mt-0.5">
-          {task.children.map(child => (
-            <TaskItem
-              key={child.id}
-              task={child}
-              depth={depth + 1}
-              maxDepth={maxDepth}
-              onUpdate={onUpdate}
-              onDelete={onDelete}
-              onAddChild={onAddChild}
-            />
+        <div className="flex flex-wrap gap-2">
+          {EXAMS.map(({ id, label }) => (
+            <button key={id} onClick={() => setSel(id)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                sel === id
+                  ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300 hover:text-orange-600'
+              }`}
+            >{label}</button>
           ))}
         </div>
+      </div>
+
+      {/* Countdown + Goal */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Trophy className="w-4 h-4 text-orange-500" />
+            <h3 className="font-bold text-gray-900">{name}</h3>
+          </div>
+          <div className="mb-3">
+            <label className="text-xs text-gray-400 font-medium">テスト日</label>
+            <input type="date" value={exam.date} onChange={e => upd('date', e.target.value)}
+              className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+          </div>
+          {days !== null && (
+            <div className={`text-center py-3 rounded-xl ${days < 0 ? 'bg-gray-50' : days <= 7 ? 'bg-red-50' : days <= 14 ? 'bg-amber-50' : 'bg-orange-50'}`}>
+              {days < 0
+                ? <p className="text-sm text-gray-500">テスト終了</p>
+                : days === 0
+                  ? <p className="text-2xl font-black text-red-600">今日！</p>
+                  : <><p className="text-4xl font-black text-orange-600">{days}</p><p className="text-xs text-gray-500 mt-1">日後</p></>
+              }
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <label className="text-xs text-gray-400 font-medium">目標</label>
+          <InlineEdit value={exam.goal} onChange={v => upd('goal', v)} placeholder="例：平均80点以上" className="font-bold text-gray-900 text-base" />
+          {hasScore && (
+            <div className="mt-4 pt-3 border-t border-gray-50 grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-2xl font-bold text-primary-600">{myTotal}</div>
+                <div className="text-xs text-gray-400">自分</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-500">{avgTotal}</div>
+                <div className="text-xs text-gray-400">校内平均</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-orange-500">{snTotal}</div>
+                <div className="text-xs text-gray-400">{univ}先輩</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Score History Chart */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <BarChart2 className="w-4 h-4 text-gray-500" />
+          点数の推移（{year}年度 合計点）
+        </h3>
+        <ScoreChart data={history} current={sel} />
+        <div className="flex items-center gap-4 mt-3 justify-center text-xs text-gray-500">
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-primary-500 inline-block" />自分</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-gray-400 inline-block" />校内平均</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" />{univ}先輩</span>
+        </div>
+      </div>
+
+      {/* Subject cards */}
+      <div className="space-y-3">
+        <h3 className="font-bold text-gray-900">科目別 管理</h3>
+        {exam.subjects.map((subj, i) => (
+          <SubjectCard
+            key={subj.id}
+            subj={subj}
+            index={i}
+            senior={senior[subj.name]}
+            schoolAvg={schAvg[subj.name]}
+            onUpdate={(f, v) => updOne(subj.id, f, v)}
+            onDelete={() => updSubjs(exam.subjects.filter(s => s.id !== subj.id))}
+            updTodos={todos => updOne(subj.id, 'todos', todos)}
+          />
+        ))}
+        <AddSubjectRow onAdd={name => {
+          if (!name.trim()) return;
+          updSubjs([...exam.subjects, { id: uid(), name: name.trim(), target:'', score:'', scope:'', todos:[] }]);
+        }} />
+      </div>
+    </div>
+  );
+}
+
+/* ── ScoreChart ──────────────────────────────────────────── */
+
+function ScoreChart({ data, current }) {
+  const max = 500;
+  const chartH = 150;
+  const barW   = 16;
+  const groupW = 72;
+  const padL   = 38;
+  const padB   = 28;
+  const totalW = padL + data.length * groupW + 10;
+
+  return (
+    <div className="overflow-x-auto">
+      <svg width="100%" viewBox={`0 0 ${totalW} ${chartH + padB}`} className="overflow-visible min-w-[320px]">
+        {[0, 100, 200, 300, 400, 500].map(v => {
+          const y = chartH - (v / max) * chartH;
+          return (
+            <g key={v}>
+              <line x1={padL} y1={y} x2={totalW - 8} y2={y} stroke="#f3f4f6" strokeWidth="1" />
+              <text x={padL - 4} y={y + 4} textAnchor="end" fontSize="9" fill="#9ca3af">{v}</text>
+            </g>
+          );
+        })}
+        {data.map((d, i) => {
+          const x0 = padL + i * groupW + 4;
+          const isCur = d.id === current;
+          return (
+            <g key={d.id}>
+              {isCur && <rect x={x0 - 2} y={0} width={groupW - 2} height={chartH} fill="#fff7ed" rx="3" />}
+
+              {d.my !== null && (() => {
+                const h = (d.my / max) * chartH;
+                return (
+                  <g>
+                    <rect x={x0} y={chartH - h} width={barW} height={h} fill={isCur ? '#4f46e5' : '#a5b4fc'} rx="2" />
+                    <text x={x0 + barW/2} y={chartH - h - 2} textAnchor="middle" fontSize="8" fill="#4f46e5">{d.my}</text>
+                  </g>
+                );
+              })()}
+
+              {d.av !== null && (() => {
+                const h = (d.av / max) * chartH;
+                return (
+                  <g>
+                    <rect x={x0 + barW + 2} y={chartH - h} width={barW} height={h} fill="#9ca3af" rx="2" />
+                    <text x={x0 + barW + 2 + barW/2} y={chartH - h - 2} textAnchor="middle" fontSize="8" fill="#6b7280">{d.av}</text>
+                  </g>
+                );
+              })()}
+
+              {d.sn !== null && (() => {
+                const h = (d.sn / max) * chartH;
+                return (
+                  <g>
+                    <rect x={x0 + (barW + 2) * 2} y={chartH - h} width={barW} height={h} fill={isCur ? '#f97316' : '#fdba74'} rx="2" />
+                    <text x={x0 + (barW+2)*2 + barW/2} y={chartH - h - 2} textAnchor="middle" fontSize="8" fill="#f97316">{d.sn}</text>
+                  </g>
+                );
+              })()}
+
+              <text x={x0 + barW + 3} y={chartH + padB - 4} textAnchor="middle" fontSize="9" fill={isCur ? '#f97316' : '#6b7280'} fontWeight={isCur ? 'bold' : 'normal'}>{d.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/* ── SubjectCard ─────────────────────────────────────────── */
+
+function SubjectCard({ subj, index, senior, schoolAvg, onUpdate, onDelete, updTodos }) {
+  const [open,    setOpen]    = useState(false);
+  const [newTodo, setNewTodo] = useState('');
+  const color = sc(index);
+
+  const vsAvg    = subj.score !== '' && schoolAvg  != null ? +subj.score - schoolAvg  : null;
+  const vsSenior = subj.score !== '' && senior      != null ? +subj.score - senior      : null;
+  const todoDone = subj.todos.filter(t => t.done).length;
+
+  const addTodo = () => {
+    const t = newTodo.trim(); if (!t) return;
+    updTodos([...subj.todos, { id: uid(), text: t, done: false }]);
+    setNewTodo('');
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <button
+        className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors text-left"
+        onClick={() => setOpen(o => !o)}
+      >
+        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold shrink-0 ${color.bg} ${color.tx}`}>{subj.name}</span>
+        <div className="flex gap-3 flex-1 flex-wrap items-center">
+          {subj.score !== '' && <span className="text-sm font-bold text-gray-900">{subj.score}点</span>}
+          {vsAvg !== null && (
+            <span className={`text-xs font-medium ${vsAvg >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+              {vsAvg >= 0 ? '+' : ''}{vsAvg} vs平均
+            </span>
+          )}
+          {vsSenior !== null && (
+            <span className={`text-xs font-medium ${vsSenior >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+              {vsSenior >= 0 ? '+' : ''}{vsSenior} vs先輩
+            </span>
+          )}
+          {subj.todos.length > 0 && (
+            <span className="text-xs text-gray-400">{todoDone}/{subj.todos.length} 完了</span>
+          )}
+          {subj.scope && <span className="text-xs text-gray-400 truncate max-w-[160px]">範囲: {subj.scope}</span>}
+        </div>
+        <ChevronRight className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="border-t border-gray-50 p-4 space-y-4">
+          {/* Score inputs */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { f:'target', label:'目標点数', cls:'border-orange-200 focus:ring-orange-400 text-orange-700' },
+              { f:'score',  label:'結果点数', cls:'border-primary-200 focus:ring-primary-400 text-primary-700 font-bold' },
+            ].map(({ f, label, cls }) => (
+              <div key={f}>
+                <label className="text-xs text-gray-400 font-medium">{label}</label>
+                <input type="number" min="0" max="100" value={subj[f]}
+                  onChange={e => onUpdate(f, e.target.value)} placeholder="—"
+                  className={`w-full mt-1 text-center border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 ${cls}`} />
+              </div>
+            ))}
+            <div>
+              <label className="text-xs text-gray-400 font-medium">校内平均</label>
+              <div className="mt-1 text-center border border-gray-100 rounded-lg px-2 py-1.5 text-sm bg-gray-50 text-gray-600">
+                {schoolAvg ?? '—'}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 font-medium">先輩の点数</label>
+              <div className="mt-1 text-center border border-orange-100 rounded-lg px-2 py-1.5 text-sm bg-orange-50 text-orange-600 font-medium">
+                {senior ?? '—'}
+              </div>
+            </div>
+          </div>
+
+          {/* Scope */}
+          <div>
+            <label className="text-xs text-gray-400 font-medium">出題範囲</label>
+            <textarea value={subj.scope} onChange={e => onUpdate('scope', e.target.value)}
+              placeholder="例：教科書 p.50-80、漢字練習帳 第3章..."
+              rows={2}
+              className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none" />
+          </div>
+
+          {/* Todos */}
+          <div>
+            <label className="text-xs text-gray-400 font-medium mb-2 block">やること</label>
+            <div className="space-y-1 mb-2">
+              {subj.todos.map(t => (
+                <div key={t.id} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-gray-50 group">
+                  <button
+                    onClick={() => updTodos(subj.todos.map(x => x.id === t.id ? { ...x, done: !x.done } : x))}
+                    className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${
+                      t.done ? 'bg-primary-500 border-primary-500' : 'border-gray-300 hover:border-primary-400'
+                    }`}
+                  >
+                    {t.done && <Check className="w-2.5 h-2.5 text-white" />}
+                  </button>
+                  <span className={`flex-1 text-sm ${t.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{t.text}</span>
+                  <button
+                    onClick={() => updTodos(subj.todos.filter(x => x.id !== t.id))}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-300 hover:text-red-500 transition-opacity"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input value={newTodo} onChange={e => setNewTodo(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addTodo()}
+                placeholder="やることを追加..."
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
+              <button onClick={addTodo} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-gray-600">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button onClick={onDelete} className="text-xs text-gray-300 hover:text-red-500 transition-colors flex items-center gap-1">
+              <Trash2 className="w-3.5 h-3.5" />この科目を削除
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-// ================================================================
-//  ExamView
-// ================================================================
-
-function ExamView({ exams, setExams }) {
-  const [selExam, setSelExam] = useState('1st-mid');
-  const exam     = exams[selExam] ?? emptyExam();
-  const examName = PRESET_EXAMS.find(e => e.id === selExam)?.label ?? '';
-
-  const update = (field, val) =>
-    setExams(prev => ({ ...prev, [selExam]: { ...(prev[selExam] ?? emptyExam()), [field]: val } }));
-
-  const updateTasks    = (tasks)    => update('tasks', tasks);
-  const updateSubjects = (subjects) => update('subjects', subjects);
-
-  const progress   = calcProgress(exam.tasks);
-  const withTarget  = exam.subjects.filter(s => s.target  !== '');
-  const withCurrent = exam.subjects.filter(s => s.current !== '');
-  const avgTarget  = withTarget.length  > 0 ? Math.round(withTarget.reduce((s, x)  => s + Number(x.target),  0) / withTarget.length)  : null;
-  const avgCurrent = withCurrent.length > 0 ? Math.round(withCurrent.reduce((s, x) => s + Number(x.current), 0) / withCurrent.length) : null;
-
+function AddSubjectRow({ onAdd }) {
+  const [v, setV] = useState('');
   return (
-    <div className="space-y-5 max-w-3xl">
-      {/* Exam selector */}
-      <div className="flex flex-wrap gap-2">
-        {PRESET_EXAMS.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setSelExam(id)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
-              selExam === id
-                ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300 hover:text-orange-600'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Header card */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Trophy className="w-5 h-5 text-orange-500" />
-          <h2 className="font-bold text-gray-900 text-lg">{examName}</h2>
-        </div>
-
-        <div className="mb-4">
-          <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">目標</label>
-          <ExamInlineEdit
-            value={exam.goal}
-            onChange={v => update('goal', v)}
-            placeholder="例：平均80点以上を取る"
-            className="text-base font-bold text-gray-900"
-          />
-        </div>
-
-        <div className="mb-4">
-          <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">メモ・作戦</label>
-          <ExamInlineEdit
-            value={exam.description}
-            onChange={v => update('description', v)}
-            placeholder="+ 勉強計画や重点科目を記入..."
-            multiline
-          />
-        </div>
-
-        {(avgCurrent !== null || avgTarget !== null || progress !== null) && (
-          <div className="flex gap-6 pt-2 border-t border-gray-50">
-            {avgCurrent !== null && (
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-700">{avgCurrent}<span className="text-sm text-gray-400 ml-0.5">点</span></div>
-                <div className="text-xs text-gray-400">現在平均</div>
-              </div>
-            )}
-            {avgTarget !== null && (
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">{avgTarget}<span className="text-sm text-orange-400 ml-0.5">点</span></div>
-                <div className="text-xs text-gray-400">目標平均</div>
-              </div>
-            )}
-            {avgCurrent !== null && avgTarget !== null && (
-              <div className="text-center">
-                <div className={`text-2xl font-bold ${avgTarget - avgCurrent >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                  {avgTarget - avgCurrent >= 0 ? '+' : ''}{avgTarget - avgCurrent}
-                  <span className="text-sm ml-0.5">点</span>
-                </div>
-                <div className="text-xs text-gray-400">差</div>
-              </div>
-            )}
-            {progress !== null && (
-              <div className="text-center">
-                <div className="text-2xl font-bold text-primary-600">{progress}<span className="text-sm text-primary-400 ml-0.5">%</span></div>
-                <div className="text-xs text-gray-400">準備完了</div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Subject scores */}
-      <SubjectScoresCard subjects={exam.subjects} onUpdate={updateSubjects} />
-
-      {/* Prep tasks */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-900">
-            準備タスク
-            {progress !== null && <span className="ml-2 text-xs font-normal text-gray-400">{progress}% 完了</span>}
-          </h3>
-          <button
-            onClick={() => updateTasks([...exam.tasks, { id: uid(), title: '新しいタスク', done: false, children: [] }])}
-            className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-100 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            追加
-          </button>
-        </div>
-
-        {progress !== null && (
-          <div className="mb-4 h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-orange-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
-          </div>
-        )}
-
-        {exam.tasks.length === 0 ? (
-          <div className="text-center py-8">
-            <Trophy className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-            <p className="text-sm text-gray-400">テスト準備タスクを追加しましょう</p>
-          </div>
-        ) : (
-          <div className="space-y-0.5">
-            {exam.tasks.map(task => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                depth={0}
-                maxDepth={2}
-                onUpdate={(id, fn) => updateTasks(updateTaskNode(exam.tasks, id, fn))}
-                onDelete={(id)     => updateTasks(deleteTaskNode(exam.tasks, id))}
-                onAddChild={(pid)  => updateTasks(addChildNode(exam.tasks, pid))}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+    <div className="flex gap-2">
+      <input value={v} onChange={e => setV(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') { onAdd(v); setV(''); } }}
+        placeholder="科目を追加..."
+        className="flex-1 border border-dashed border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
+      <button onClick={() => { onAdd(v); setV(''); }}
+        className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-600 rounded-xl text-sm hover:bg-gray-200">
+        <Plus className="w-3.5 h-3.5" />追加
+      </button>
     </div>
   );
 }
 
-function ExamInlineEdit({ value, onChange, placeholder, className = 'text-sm text-gray-700', multiline = false }) {
-  const [editing, setEditing] = useState(false);
-  const inputClass = 'w-full mt-1 border border-primary-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400';
-
-  if (editing) {
-    return multiline ? (
-      <textarea
-        className={`${inputClass} resize-none`}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onBlur={() => setEditing(false)}
-        rows={3}
-        autoFocus
-      />
-    ) : (
-      <input
-        className={inputClass}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onBlur={() => setEditing(false)}
-        onKeyDown={e => e.key === 'Enter' && setEditing(false)}
-        autoFocus
-      />
-    );
-  }
-
+function InlineEdit({ value, onChange, placeholder, className = 'text-sm text-gray-700' }) {
+  const [ed, setEd] = useState(false);
+  if (ed) return (
+    <input
+      className="w-full mt-1 border border-primary-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+      value={value} onChange={e => onChange(e.target.value)}
+      onBlur={() => setEd(false)} onKeyDown={e => e.key === 'Enter' && setEd(false)} autoFocus />
+  );
   return (
-    <div className="group cursor-pointer mt-1" onClick={() => setEditing(true)}>
-      {value
-        ? <p className={className}>{value}</p>
-        : <p className="text-sm text-gray-300 italic">{placeholder}</p>
+    <div className="group cursor-pointer mt-1" onClick={() => setEd(true)}>
+      {value ? <p className={className}>{value}</p> : <p className="text-sm text-gray-300 italic">{placeholder}</p>}
+    </div>
+  );
+}
+
+/* ── HwView ──────────────────────────────────────────────── */
+
+function HwView({ hw, setHw, role }) {
+  const today   = new Date();
+  const todayStr = toDateStr(today);
+  const [date,  setDate]  = useState(todayStr);
+  const [subj,  setSubj]  = useState(HW_SUBJECTS[0]);
+  const [txt,   setTxt]   = useState('');
+  const [tOpen, setTOpen] = useState(false);
+  const [tStart,setTStart]= useState(todayStr);
+  const [tEnd,  setTEnd]  = useState(todayStr);
+  const [tSubj, setTSubj] = useState(HW_SUBJECTS[0]);
+  const [tTxt,  setTTxt]  = useState('');
+
+  const tasks    = hw[date] ?? [];
+  const setTasks = t => setHw(p => ({ ...p, [date]: t }));
+
+  const add = () => {
+    const t = txt.trim(); if (!t) return;
+    setTasks([...tasks, { id: uid(), subject: subj, title: t, done: false, fromTeacher: false }]);
+    setTxt('');
+  };
+
+  const toggle = id => setTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const del    = id => setTasks(tasks.filter(t => t.id !== id));
+
+  const prev = () => { const d = new Date(date + 'T00:00:00'); d.setDate(d.getDate()-1); setDate(toDateStr(d)); };
+  const next = () => { const d = new Date(date + 'T00:00:00'); d.setDate(d.getDate()+1); setDate(toDateStr(d)); };
+
+  const bulkAdd = () => {
+    const t = tTxt.trim(); if (!t) return;
+    const start = new Date(tStart + 'T00:00:00');
+    const end   = new Date(tEnd   + 'T00:00:00');
+    if (start > end) return;
+    setHw(prev => {
+      const next = { ...prev };
+      for (const d = new Date(start); d <= end; d.setDate(d.getDate()+1)) {
+        const k = toDateStr(d);
+        const existing = next[k] ?? [];
+        if (!existing.some(x => x.subject === tSubj && x.title === t)) {
+          next[k] = [...existing, { id: uid(), subject: tSubj, title: t, done: false, fromTeacher: true }];
+        }
       }
-    </div>
-  );
-}
-
-function SubjectScoresCard({ subjects, onUpdate }) {
-  const [newName, setNewName] = useState('');
-
-  const updateSubject = (id, field, val) =>
-    onUpdate(subjects.map(s => s.id === id ? { ...s, [field]: val } : s));
-
-  const addSubject = () => {
-    const name = newName.trim();
-    if (!name) return;
-    onUpdate([...subjects, { id: uid(), name, current: '', target: '' }]);
-    setNewName('');
+      return next;
+    });
+    setTTxt('');
   };
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <h3 className="font-bold text-gray-900 mb-4">科目別 得点目標</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs text-gray-400 border-b border-gray-100">
-              <th className="text-left pb-2 font-medium">科目</th>
-              <th className="text-center pb-2 font-medium w-24">前回点数</th>
-              <th className="text-center pb-2 font-medium w-24">目標点数</th>
-              <th className="text-center pb-2 font-medium w-16">差</th>
-              <th className="w-8 pb-2" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {subjects.map((s, i) => {
-              const diff = (s.target !== '' && s.current !== '') ? Number(s.target) - Number(s.current) : null;
-              const color = getSubjectColor(i);
-              return (
-                <tr key={s.id} className="group">
-                  <td className="py-2.5 pr-3">
-                    <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${color.bg} ${color.text}`}>{s.name}</span>
-                  </td>
-                  <td className="py-2.5 px-2">
-                    <input
-                      type="number" min="0" max="100"
-                      value={s.current}
-                      onChange={e => updateSubject(s.id, 'current', e.target.value)}
-                      placeholder="—"
-                      className="w-full text-center border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-                    />
-                  </td>
-                  <td className="py-2.5 px-2">
-                    <input
-                      type="number" min="0" max="100"
-                      value={s.target}
-                      onChange={e => updateSubject(s.id, 'target', e.target.value)}
-                      placeholder="—"
-                      className="w-full text-center border border-orange-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 text-orange-700"
-                    />
-                  </td>
-                  <td className="py-2.5 px-2 text-center">
-                    {diff !== null
-                      ? <span className={`text-xs font-bold ${diff >= 0 ? 'text-green-600' : 'text-red-500'}`}>{diff >= 0 ? '+' : ''}{diff}</span>
-                      : <span className="text-gray-300">—</span>
-                    }
-                  </td>
-                  <td className="py-2.5">
-                    <button
-                      onClick={() => onUpdate(subjects.filter(x => x.id !== s.id))}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 rounded transition-opacity"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-3 flex gap-2">
-        <input
-          value={newName}
-          onChange={e => setNewName(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && addSubject()}
-          placeholder="科目を追加..."
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-        />
-        <button
-          onClick={addSubject}
-          className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          追加
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ================================================================
-//  HomeworkView
-// ================================================================
-
-function HomeworkView({ homework, setHomework }) {
-  const today = new Date();
-  const [selDate,    setSelDate]    = useState(toDateStr(today));
-  const [newSubject, setNewSubject] = useState(HW_SUBJECTS[0]);
-  const [newTitle,   setNewTitle]   = useState('');
-
-  const tasks    = homework[selDate] ?? [];
-  const setTasks = (newTasks) => setHomework(prev => ({ ...prev, [selDate]: newTasks }));
-
-  const addTask = () => {
-    const title = newTitle.trim();
-    if (!title) return;
-    setTasks([...tasks, { id: uid(), subject: newSubject, title, done: false }]);
-    setNewTitle('');
-  };
-
-  const toggleTask = (id) => setTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
-  const deleteTask = (id) => setTasks(tasks.filter(t => t.id !== id));
-
-  const prevDay = () => { const d = new Date(selDate + 'T00:00:00'); d.setDate(d.getDate() - 1); setSelDate(toDateStr(d)); };
-  const nextDay = () => { const d = new Date(selDate + 'T00:00:00'); d.setDate(d.getDate() + 1); setSelDate(toDateStr(d)); };
 
   const done  = tasks.filter(t => t.done).length;
   const total = tasks.length;
   const pct   = total > 0 ? Math.round(done / total * 100) : 0;
 
   const grouped = useMemo(() => {
-    const map = {};
-    tasks.forEach(t => {
-      if (!map[t.subject]) map[t.subject] = [];
-      map[t.subject].push(t);
-    });
-    return map;
+    const m = {};
+    tasks.forEach(t => { if (!m[t.subject]) m[t.subject] = []; m[t.subject].push(t); });
+    return m;
   }, [tasks]);
-
-  const subjectKeys = Object.keys(grouped);
 
   return (
     <div className="max-w-3xl space-y-5">
+
+      {/* Teacher bulk-add */}
+      {role === 'teacher' && (
+        <div className="bg-white rounded-2xl border border-orange-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-orange-500" />
+              <h3 className="font-bold text-gray-900">生徒への一斉宿題追加</h3>
+            </div>
+            <button onClick={() => setTOpen(o => !o)}
+              className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${
+                tOpen ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-orange-50'
+              }`}
+            >{tOpen ? '▲ 閉じる' : '▼ 開く'}</button>
+          </div>
+          {tOpen && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-400 font-medium">開始日</label>
+                  <input type="date" value={tStart} onChange={e => setTStart(e.target.value)}
+                    className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 font-medium">終了日</label>
+                  <input type="date" value={tEnd} onChange={e => setTEnd(e.target.value)}
+                    className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <select value={tSubj} onChange={e => setTSubj(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white">
+                  {HW_SUBJECTS.map(s => <option key={s}>{s}</option>)}
+                </select>
+                <input value={tTxt} onChange={e => setTTxt(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && bulkAdd()}
+                  placeholder="宿題の内容..."
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                <button onClick={bulkAdd}
+                  className="flex items-center justify-center gap-1 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors">
+                  <Plus className="w-4 h-4" />一斉追加
+                </button>
+              </div>
+              <p className="text-xs text-gray-400">選択期間の全日付に宿題が追加されます</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Date navigation */}
       <div className="flex items-center justify-between bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-3">
-        <button onClick={prevDay} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-          <ChevronLeft className="w-5 h-5 text-gray-500" />
-        </button>
+        <button onClick={prev} className="p-1.5 hover:bg-gray-100 rounded-lg"><ChevronLeft className="w-5 h-5 text-gray-500" /></button>
         <div className="text-center">
           <span className="text-xs font-bold bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full mb-1.5 inline-block">宿題</span>
-          <p className="font-bold text-gray-900 text-sm">{formatDateJP(selDate)}</p>
-          {selDate === toDateStr(today) && <p className="text-xs text-teal-500 mt-0.5">今日</p>}
+          <p className="font-bold text-gray-900 text-sm">{formatDateJP(date)}</p>
+          {date === todayStr && <p className="text-xs text-teal-500 mt-0.5">今日</p>}
         </div>
-        <button onClick={nextDay} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-          <ChevronRight className="w-5 h-5 text-gray-500" />
-        </button>
+        <button onClick={next} className="p-1.5 hover:bg-gray-100 rounded-lg"><ChevronRight className="w-5 h-5 text-gray-500" /></button>
       </div>
 
       {/* Quick add */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h3 className="font-bold text-gray-900 mb-3">宿題を追加</h3>
         <div className="flex flex-col sm:flex-row gap-2">
-          <select
-            value={newSubject}
-            onChange={e => setNewSubject(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
-          >
+          <select value={subj} onChange={e => setSubj(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white">
             {HW_SUBJECTS.map(s => <option key={s}>{s}</option>)}
           </select>
-          <input
-            value={newTitle}
-            onChange={e => setNewTitle(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addTask()}
+          <input value={txt} onChange={e => setTxt(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && add()}
             placeholder="宿題の内容を入力... (Enterで追加)"
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-          />
-          <button
-            onClick={addTask}
-            className="flex items-center justify-center gap-1 px-4 py-2 bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            追加
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+          <button onClick={add}
+            className="flex items-center justify-center gap-1 px-4 py-2 bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-600 transition-colors">
+            <Plus className="w-4 h-4" />追加
           </button>
         </div>
       </div>
@@ -948,38 +667,32 @@ function HomeworkView({ homework, setHomework }) {
           <div className="text-center py-10">
             <ClipboardList className="w-10 h-10 text-gray-200 mx-auto mb-2" />
             <p className="text-sm text-gray-400">この日の宿題はありません</p>
-            <p className="text-xs text-gray-300 mt-1">上のフォームから追加しましょう</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {subjectKeys.map((subject, gi) => {
-              const color = getSubjectColor(gi);
-              const subjectTasks = grouped[subject];
-              const subDone = subjectTasks.filter(t => t.done).length;
+            {Object.entries(grouped).map(([s, items], gi) => {
+              const c = sc(gi);
               return (
-                <div key={subject}>
+                <div key={s}>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${color.bg} ${color.text}`}>{subject}</span>
-                    <span className="text-xs text-gray-400">{subDone}/{subjectTasks.length}</span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${c.bg} ${c.tx}`}>{s}</span>
+                    <span className="text-xs text-gray-400">{items.filter(t => t.done).length}/{items.length}</span>
                   </div>
                   <div className="space-y-1 pl-1">
-                    {subjectTasks.map(t => (
+                    {items.map(t => (
                       <div key={t.id} className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-gray-50 group">
-                        <button
-                          onClick={() => toggleTask(t.id)}
+                        <button onClick={() => toggle(t.id)}
                           className={`w-5 h-5 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${
                             t.done ? 'bg-teal-500 border-teal-500' : 'border-gray-300 hover:border-teal-400'
-                          }`}
-                        >
+                          }`}>
                           {t.done && <Check className="w-3 h-3 text-white" />}
                         </button>
-                        <span className={`flex-1 text-sm ${t.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                          {t.title}
-                        </span>
-                        <button
-                          onClick={() => deleteTask(t.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 rounded transition-opacity"
-                        >
+                        <span className={`flex-1 text-sm ${t.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{t.title}</span>
+                        {t.fromTeacher && (
+                          <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium">先生</span>
+                        )}
+                        <button onClick={() => del(t.id)}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-red-500 rounded transition-opacity">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -995,276 +708,165 @@ function HomeworkView({ homework, setHomework }) {
   );
 }
 
-// ================================================================
-//  Overview MAP
-// ================================================================
+/* ── MockExView ──────────────────────────────────────────── */
 
-function OverviewMap({ goals, selYear, onSelectYear, onNavigate }) {
-  const yearKey  = String(selYear);
-  const yearGoal = goals[yearKey];
+function MockExView({ mockex, setMockex }) {
+  const todayStr = toDateStr(new Date());
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name:'', date:'', organizer:'', deadline:'', note:'' });
+  const setF = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const monthData = useMemo(() => {
-    return Array.from({ length: 12 }, (_, i) => {
-      const month    = i + 1;
-      const monthKey = `${selYear}-${month}`;
-      const mGoal    = goals[monthKey];
-
-      const weekKeys = Object.keys(goals).filter(k => {
-        if (!k.startsWith(`${selYear}-W`)) return false;
-        const week   = parseInt(k.split('-W')[1]);
-        const monday = getWeekMonday(selYear, week);
-        return monday.getMonth() + 1 === month;
-      }).sort();
-
-      return { month, monthKey, mGoal, weekKeys };
-    });
-  }, [goals, selYear]);
-
-  const prog = (g) => g ? calcProgress(g.tasks) : null;
-
-  return (
-    <div className="max-w-3xl space-y-4">
-      <div className="flex items-center justify-between bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-3">
-        <button onClick={() => onSelectYear(y => y - 1)} className="p-1.5 hover:bg-gray-100 rounded-lg">
-          <ChevronLeft className="w-5 h-5 text-gray-500" />
-        </button>
-        <span className="font-bold text-gray-900">{selYear}年 全体MAP</span>
-        <button onClick={() => onSelectYear(y => y + 1)} className="p-1.5 hover:bg-gray-100 rounded-lg">
-          <ChevronRight className="w-5 h-5 text-gray-500" />
-        </button>
-      </div>
-
-      <div
-        className="bg-white border-2 border-green-300 rounded-2xl p-4 cursor-pointer hover:border-green-500 transition-colors shadow-sm"
-        onClick={() => onNavigate('yearly')}
-      >
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">年次目標</span>
-            <p className="font-bold text-gray-900 mt-1.5 text-sm">
-              {yearGoal?.title || <span className="text-gray-400 italic">（未設定）</span>}
-            </p>
-            {yearGoal?.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{yearGoal.description}</p>}
-          </div>
-          {prog(yearGoal) !== null && (
-            <div className="text-center shrink-0">
-              <div className="text-2xl font-bold text-green-600">{prog(yearGoal)}%</div>
-              <div className="text-xs text-gray-400">達成率</div>
-            </div>
-          )}
-        </div>
-        {prog(yearGoal) !== null && (
-          <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${prog(yearGoal)}%` }} />
-          </div>
-        )}
-      </div>
-
-      <div className="relative pl-6 border-l-2 border-gray-200 ml-4 space-y-3">
-        {monthData.map(({ month, monthKey, mGoal, weekKeys }) => {
-          const mp = prog(mGoal);
-          return (
-            <div key={month} className="relative">
-              <div className="absolute -left-8 top-4 w-4 h-px bg-gray-300" />
-              <div className="absolute -left-9 top-3 w-3 h-3 rounded-full bg-white border-2 border-gray-300" />
-
-              <div
-                className={`bg-white border rounded-xl p-3 cursor-pointer transition-colors ${
-                  mGoal?.title ? 'border-blue-200 hover:border-blue-400' : 'border-gray-100 hover:border-gray-300'
-                }`}
-                onClick={() => onNavigate('monthly', month)}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <span className="text-xs font-bold text-blue-600">{MONTHS_JP[month - 1]}</span>
-                    <p className="text-sm text-gray-800 mt-0.5">
-                      {mGoal?.title || <span className="text-gray-400 italic text-xs">（未設定）</span>}
-                    </p>
-                  </div>
-                  {mp !== null && <span className="text-sm font-bold text-blue-600 shrink-0">{mp}%</span>}
-                </div>
-                {mp !== null && (
-                  <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${mp}%` }} />
-                  </div>
-                )}
-              </div>
-
-              {weekKeys.length > 0 && (
-                <div className="pl-6 border-l border-dashed border-gray-200 ml-3 mt-2 space-y-1.5">
-                  {weekKeys.map(wk => {
-                    const week   = parseInt(wk.split('-W')[1]);
-                    const wGoal  = goals[wk];
-                    const wp     = prog(wGoal);
-                    const monday = getWeekMonday(selYear, week);
-                    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-                    return (
-                      <div
-                        key={wk}
-                        className="bg-gray-50 border border-gray-100 hover:border-purple-300 rounded-lg p-2.5 cursor-pointer transition-colors"
-                        onClick={() => onNavigate('weekly', month, week)}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <span className="text-xs font-medium text-purple-500">
-                              第{week}週（{monday.getMonth() + 1}/{monday.getDate()}〜{sunday.getMonth() + 1}/{sunday.getDate()}）
-                            </span>
-                            <p className="text-xs text-gray-700 mt-0.5">
-                              {wGoal?.title || <span className="text-gray-400 italic">（未設定）</span>}
-                            </p>
-                          </div>
-                          {wp !== null && <span className="text-xs font-bold text-purple-500 shrink-0">{wp}%</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ================================================================
-//  Reflection View
-// ================================================================
-
-function ReflectionView({ goals, onGoalChange }) {
-  const [editKey, setEditKey]   = useState(null);
-  const [editText, setEditText] = useState('');
-
-  const entries = useMemo(() => {
-    return Object.entries(goals)
-      .filter(([, g]) => g.title)
-      .map(([key, goal]) => {
-        const isWeekly  = key.includes('-W');
-        const isMonthly = !isWeekly && key.includes('-');
-        const type = isWeekly ? 'weekly' : isMonthly ? 'monthly' : 'yearly';
-        return { key, goal, type };
-      })
-      .sort((a, b) => {
-        const order = { yearly: 0, monthly: 1, weekly: 2 };
-        if (order[a.type] !== order[b.type]) return order[a.type] - order[b.type];
-        return b.key.localeCompare(a.key);
-      });
-  }, [goals]);
-
-  const periodLabel = (key) => {
-    if (key.includes('-W')) {
-      const [yearStr, weekStr] = key.split('-W');
-      const week   = parseInt(weekStr);
-      const monday = getWeekMonday(parseInt(yearStr), week);
-      const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-      return `${yearStr}年 第${week}週（${monday.getMonth() + 1}/${monday.getDate()}〜${sunday.getMonth() + 1}/${sunday.getDate()}）`;
-    }
-    if (key.includes('-')) {
-      const [year, month] = key.split('-');
-      return `${year}年 ${MONTHS_JP[parseInt(month) - 1]}`;
-    }
-    return `${key}年`;
+  const add = () => {
+    if (!form.name || !form.date) return;
+    setMockex(p => [...p, { id: uid(), ...form }]);
+    setForm({ name:'', date:'', organizer:'', deadline:'', note:'' });
+    setShowForm(false);
   };
+  const del = id => setMockex(p => p.filter(e => e.id !== id));
+
+  const sorted   = useMemo(() => [...mockex].sort((a, b) => a.date.localeCompare(b.date)), [mockex]);
+  const upcoming = sorted.filter(e => e.date >= todayStr);
+  const past     = sorted.filter(e => e.date <  todayStr);
 
   return (
     <div className="max-w-3xl space-y-5">
-      <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm">
-        <RotateCcw className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-        <div>
-          <p className="font-bold text-amber-800 mb-0.5">振り返りの3点セット</p>
-          <p className="text-amber-700 text-xs">① うまくいったこと　② 改善点・課題　③ 次のアクション</p>
-        </div>
-      </div>
 
-      {entries.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
-          <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>まだ目標が登録されていません</p>
-          <p className="text-xs mt-1">年次・月次・週次タブから目標を設定してください</p>
-        </div>
-      )}
-
-      {entries.map(({ key, goal, type }) => {
-        const ts   = TYPE_STYLE[type];
-        const prog = calcProgress(goal.tasks);
-        const isEditing = editKey === key;
-
+      {/* Next exam countdown */}
+      {upcoming[0] && (() => {
+        const d = daysUntil(upcoming[0].date);
+        const dl = upcoming[0].deadline ? daysUntil(upcoming[0].deadline) : null;
         return (
-          <div key={key} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ts.badge}`}>{ts.label}</span>
-                  <span className="text-xs text-gray-400">{periodLabel(key)}</span>
-                </div>
-                <h3 className="font-bold text-gray-900">{goal.title}</h3>
-                {goal.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{goal.description}</p>}
+          <div className="bg-white rounded-2xl border border-primary-200 shadow-sm p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="text-xs font-bold bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">次の模試</span>
+                <p className="font-bold text-gray-900 mt-2 text-lg">{upcoming[0].name}</p>
+                <p className="text-sm text-gray-500 mt-0.5">{formatDateJP(upcoming[0].date)}</p>
+                {upcoming[0].organizer && <p className="text-xs text-gray-400 mt-0.5">主催：{upcoming[0].organizer}</p>}
+                {upcoming[0].deadline && (
+                  <p className={`text-xs mt-1 font-medium ${dl !== null && dl <= 7 ? 'text-red-500' : 'text-gray-500'}`}>
+                    申込締切：{formatDateJP(upcoming[0].deadline)}{dl !== null && dl >= 0 && ` (あと${dl}日)`}
+                  </p>
+                )}
               </div>
-              {prog !== null && (
-                <div className="text-center shrink-0">
-                  <div className="text-xl font-bold" style={{ color: ts.bar }}>{prog}%</div>
-                  <div className="text-xs text-gray-400">達成率</div>
+              {d !== null && (
+                <div className={`text-center px-6 py-4 rounded-xl shrink-0 ${d <= 7 ? 'bg-red-50' : d <= 30 ? 'bg-amber-50' : 'bg-primary-50'}`}>
+                  <div className={`text-4xl font-black ${d <= 7 ? 'text-red-600' : d <= 30 ? 'text-amber-600' : 'text-primary-600'}`}>{d}</div>
+                  <div className="text-xs text-gray-500 mt-1">日後</div>
                 </div>
-              )}
-            </div>
-
-            {prog !== null && (
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-4">
-                <div className="h-full rounded-full" style={{ width: `${prog}%`, background: ts.bar }} />
-              </div>
-            )}
-
-            <div>
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1.5">振り返り</p>
-              {isEditing ? (
-                <div className="space-y-2">
-                  <textarea
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
-                    value={editText}
-                    onChange={e => setEditText(e.target.value)}
-                    placeholder={"この期間を振り返って...\n\n・うまくいったこと\n・改善したいこと\n・次のアクション"}
-                    rows={4}
-                    autoFocus
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        onGoalChange(key, { ...goal, reflection: editText, reflectionDate: new Date().toLocaleDateString('ja-JP') });
-                        setEditKey(null);
-                      }}
-                      className="px-4 py-1.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
-                    >
-                      保存
-                    </button>
-                    <button
-                      onClick={() => setEditKey(null)}
-                      className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition-colors"
-                    >
-                      キャンセル
-                    </button>
-                  </div>
-                </div>
-              ) : goal.reflection ? (
-                <div
-                  className="bg-amber-50 border border-amber-100 rounded-xl p-3.5 cursor-pointer hover:bg-amber-100 transition-colors"
-                  onClick={() => { setEditKey(key); setEditText(goal.reflection); }}
-                >
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{goal.reflection}</p>
-                  {goal.reflectionDate && <p className="text-xs text-gray-400 mt-2">{goal.reflectionDate} 記録</p>}
-                </div>
-              ) : (
-                <button
-                  onClick={() => { setEditKey(key); setEditText(''); }}
-                  className="text-sm text-gray-300 italic hover:text-amber-500 transition-colors"
-                >
-                  + 振り返りを記録する...
-                </button>
               )}
             </div>
           </div>
         );
-      })}
+      })()}
+
+      {/* Header + add button */}
+      <div className="flex justify-between items-center">
+        <h3 className="font-bold text-gray-900">模試スケジュール</h3>
+        <button onClick={() => setShowForm(s => !s)}
+          className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-xl text-sm font-medium hover:bg-primary-700 transition-colors">
+          <Plus className="w-4 h-4" />模試を追加
+        </button>
+      </div>
+
+      {/* Add form */}
+      {showForm && (
+        <div className="bg-white rounded-2xl border border-primary-100 shadow-sm p-5 space-y-3">
+          <h4 className="font-bold text-gray-900">模試を追加</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="text-xs text-gray-400 font-medium">模試名 *</label>
+              <input value={form.name} onChange={e => setF('name', e.target.value)}
+                placeholder="例：第1回全統記述模試"
+                className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 font-medium">試験日 *</label>
+              <input type="date" value={form.date} onChange={e => setF('date', e.target.value)}
+                className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 font-medium">主催</label>
+              <input value={form.organizer} onChange={e => setF('organizer', e.target.value)}
+                placeholder="例：河合塾"
+                className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 font-medium">申込締切</label>
+              <input type="date" value={form.deadline} onChange={e => setF('deadline', e.target.value)}
+                className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 font-medium">メモ（会場・科目など）</label>
+              <input value={form.note} onChange={e => setF('note', e.target.value)}
+                placeholder="例：○○会場、英数国"
+                className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-xl text-sm hover:bg-gray-200">キャンセル</button>
+            <button onClick={add} className="px-4 py-2 bg-primary-600 text-white rounded-xl text-sm font-medium hover:bg-primary-700">追加</button>
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming */}
+      {upcoming.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">今後の模試</p>
+          {upcoming.map(e => <MockExCard key={e.id} exam={e} onDelete={del} />)}
+        </div>
+      )}
+
+      {/* Past */}
+      {past.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">過去の模試</p>
+          {past.map(e => <MockExCard key={e.id} exam={e} onDelete={del} past />)}
+        </div>
+      )}
+
+      {sorted.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <Calendar className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>模試の予定がありません</p>
+          <p className="text-xs mt-1">「模試を追加」ボタンから登録しましょう</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MockExCard({ exam, onDelete, past = false }) {
+  const days = daysUntil(exam.date);
+  const dlDays = exam.deadline ? daysUntil(exam.deadline) : null;
+
+  return (
+    <div className={`bg-white rounded-xl border shadow-sm p-4 flex items-start gap-4 ${past ? 'opacity-60 border-gray-100' : 'border-gray-100'}`}>
+      <div className="flex-1 min-w-0">
+        <p className="font-bold text-gray-900 text-sm">{exam.name}</p>
+        <p className="text-xs text-gray-500 mt-0.5">{formatDateJP(exam.date)}</p>
+        {exam.organizer && <p className="text-xs text-gray-400 mt-0.5">主催：{exam.organizer}</p>}
+        {exam.deadline && (
+          <p className={`text-xs mt-0.5 ${dlDays !== null && dlDays >= 0 && dlDays <= 7 ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+            申込締切：{formatDateJP(exam.deadline)}
+            {dlDays !== null && dlDays >= 0 && dlDays <= 14 && ` (あと${dlDays}日)`}
+          </p>
+        )}
+        {exam.note && <p className="text-xs text-gray-400 mt-0.5">{exam.note}</p>}
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        {!past && days !== null && days >= 0 && (
+          <div className="text-center">
+            <div className={`text-xl font-black ${days <= 7 ? 'text-red-600' : days <= 30 ? 'text-amber-600' : 'text-primary-600'}`}>{days}</div>
+            <div className="text-xs text-gray-400">日後</div>
+          </div>
+        )}
+        {past && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">終了</span>}
+        <button onClick={() => onDelete(exam.id)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-lg transition-colors">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
