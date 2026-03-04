@@ -79,6 +79,7 @@ function SubNav({ role, currentPath, navigate }) {
     { label: '目標管理', path: '/goals' },
     { label: 'チャット', path: '/chat' },
     { label: 'コンテンツ', path: '/contents' },
+    { label: 'LP', path: '/lp' },
   ];
   const teacherNav = [
     { label: 'キャリア台帳', path: '/' },
@@ -86,6 +87,7 @@ function SubNav({ role, currentPath, navigate }) {
     { label: '講演依頼', path: '/lecture-request' },
     { label: 'フィードバック管理', path: '/feedback' },
     { label: 'コンテンツ', path: '/contents' },
+    { label: 'LP', path: '/lp' },
   ];
   const alumniNav = [
     { label: 'キャリア台帳', path: '/' },
@@ -94,6 +96,7 @@ function SubNav({ role, currentPath, navigate }) {
     { label: '生徒情報', path: '/students' },
     { label: 'チューター管理', path: '/tutor' },
     { label: 'コンテンツ', path: '/contents' },
+    { label: 'LP', path: '/lp' },
   ];
 
   const navItems = role === 'student' ? studentNav : role === 'teacher' ? teacherNav : alumniNav;

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import Layout from './components/Layout';
 import InterviewModal from './components/InterviewModal';
@@ -19,11 +19,6 @@ import { useApp } from './context/AppContext';
 
 function AppRoutes() {
   const { role } = useApp();
-  const location = useLocation();
-
-  if (location.pathname === '/lp') {
-    return <LandingPage />;
-  }
 
   return (
     <Layout>
@@ -31,6 +26,7 @@ function AppRoutes() {
         <Route path="/" element={<AlumniList />} />
         <Route path="/alumni/:id" element={<AlumniDetail />} />
         <Route path="/university-map" element={<UniversityMindMap />} />
+        <Route path="/lp" element={<LandingPage />} />
         {role === 'student' && (
           <>
             <Route path="/goals" element={<GoalManagement />} />
