@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import Layout from './components/Layout';
 import InterviewModal from './components/InterviewModal';
@@ -14,10 +14,16 @@ import TutorHub from './pages/TutorHub';
 import GoalManagement from './pages/GoalManagement';
 import AlumniChat from './pages/AlumniChat';
 import StudentList from './pages/StudentList';
+import LandingPage from './pages/LandingPage';
 import { useApp } from './context/AppContext';
 
 function AppRoutes() {
   const { role } = useApp();
+  const location = useLocation();
+
+  if (location.pathname === '/lp') {
+    return <LandingPage />;
+  }
 
   return (
     <Layout>
