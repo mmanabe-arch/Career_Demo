@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import {
   Target, TrendingUp, BookOpen, Users, Plus, Trash2,
   CheckCircle, Circle, Award, ChevronRight, RotateCcw,
+  ChevronLeft, AlertTriangle,
 } from 'lucide-react';
 import { studentList } from '../data/students';
 
@@ -774,55 +775,409 @@ function MistakeReview({ exam, onUpdate }) {
   );
 }
 
+// ── 生徒ごとのモックデータ生成 ───────────────────────────────────────────────
+const SCORE_KEY_MAP = { japanese: '国語', math: '数学', english: '英語', science: '理科', social: '社会' };
+
+// 生徒ごとの科目別タスク（デモ用）
+const STUDENT_TASKS = [
+  { 国語: ['現代文の要約練習', '古文単語200語'], 数学: ['青チャート例題50問', '過去問2年分'], 英語: ['長文読解10題', '単語帳1章'], 理科: ['物理公式暗記', '化学反応式まとめ'], 社会: ['年表まとめ'] },
+  { 国語: ['漢字練習50問'], 数学: ['証明問題特訓', '計算ドリル'], 英語: ['文法問題30題', '英作文5題'], 理科: ['有機化学総復習', '実験問題演習'], 社会: ['地図暗記', '統計データ確認'] },
+  { 国語: ['論説文読解練習'], 数学: ['関数グラフ演習'], 英語: ['リスニング30分'], 理科: ['理科基礎の公式確認'], 社会: ['現代社会ニュースまとめ', '政治経済ノート作成'] },
+  { 国語: ['現代文要約10本', '古典文法確認'], 数学: ['微積分演習'], 英語: ['英文法総復習', 'TOEIC単語'], 理科: ['化学基礎の計算問題'], 社会: ['世界史通史まとめ', '文化史ノート'] },
+  { 国語: ['小論文練習'], 数学: ['数列・確率演習'], 英語: ['英語長文速読'], 理科: ['生物暗記事項チェック'], 社会: ['地理・統計問題'] },
+  { 国語: ['随筆読解練習'], 数学: ['ベクトル演習', '整数問題'], 英語: ['英文解釈精読'], 理科: ['力学総まとめ'], 社会: ['倫理・現代社会'] },
+];
+
+// 生徒ごとの振り返り問題（デモ用）
+const STUDENT_MISTAKES = [
+  {
+    国語: [{ id: 's1m1', question: '「逡巡」の読み', answer: 'しゅんじゅん' }, { id: 's1m2', question: '「憂慮」の意味', answer: '心配して思い悩むこと' }],
+    数学: [{ id: 's1m3', question: '∫x²dx を計算せよ', answer: 'x³/3 + C' }],
+    英語: [{ id: 's1m4', question: 'as well as の意味', answer: '〜と同様に・〜だけでなく' }],
+    理科: [{ id: 's1m5', question: 'オームの法則の式', answer: 'V = IR' }],
+    社会: [],
+  },
+  {
+    国語: [],
+    数学: [{ id: 's2m1', question: '(a+b)³ を展開せよ', answer: 'a³+3a²b+3ab²+b³' }, { id: 's2m2', question: 'log₂8 の値', answer: '3' }],
+    英語: [{ id: 's2m3', question: 'nevertheless の意味', answer: 'それにもかかわらず' }],
+    理科: [{ id: 's2m4', question: 'アボガドロ定数', answer: '6.02×10²³' }, { id: 's2m5', question: '中和反応の一般式', answer: '酸 + 塩基 → 塩 + 水' }],
+    社会: [{ id: 's2m6', question: '光合成の化学反応式', answer: '6CO₂+6H₂O→C₆H₁₂O₆+6O₂' }],
+  },
+  {
+    国語: [{ id: 's3m1', question: '「示唆」の読み', answer: 'しさ' }],
+    数学: [{ id: 's3m2', question: '二項定理で (1+x)⁴ を展開した x³ の係数', answer: '4' }],
+    英語: [],
+    理科: [],
+    社会: [{ id: 's3m3', question: 'GDP の正式名称', answer: '国内総生産' }, { id: 's3m4', question: '需要の価格弾力性の定義', answer: '価格1%変化に対する需要量の変化率' }],
+  },
+  {
+    国語: [{ id: 's4m1', question: '「喜捨」の意味', answer: '慈善のために財産を寄付すること' }],
+    数学: [{ id: 's4m2', question: 'sinπ/6 の値', answer: '1/2' }, { id: 's4m3', question: 'cos60° の値', answer: '1/2' }],
+    英語: [{ id: 's4m4', question: 'whereas の意味', answer: '〜であるのに対して（対比）' }],
+    理科: [],
+    社会: [{ id: 's4m5', question: '大宝律令が制定された年', answer: '701年' }],
+  },
+  {
+    国語: [],
+    数学: [{ id: 's5m1', question: '等比数列の和の公式', answer: 'S = a(rⁿ-1)/(r-1)' }],
+    英語: [{ id: 's5m2', question: 'be prone to の意味', answer: '〜しやすい・〜の傾向がある' }],
+    理科: [{ id: 's5m3', question: '細胞分裂の順序', answer: '間期→前期→中期→後期→終期' }],
+    社会: [{ id: 's5m4', question: 'ケッペンの気候区分でBSは何気候か', answer: 'ステップ気候' }],
+  },
+  {
+    国語: [{ id: 's6m1', question: '「涵養」の意味', answer: 'ゆっくりと養い育てること' }],
+    数学: [{ id: 's6m2', question: '内積 a⃗·b⃗ の定義', answer: '|a⃗||b⃗|cosθ' }],
+    英語: [{ id: 's6m3', question: 'let alone の意味', answer: 'まして〜はなおさら' }, { id: 's6m4', question: 'come across の意味', answer: '偶然出会う・見つける' }],
+    理科: [],
+    社会: [],
+  },
+];
+
+function buildStudentExams(student, idx) {
+  return student.regularExams.map((exam, i) => {
+    const resultSubjects = Object.fromEntries(
+      Object.entries(exam.scores).map(([k, v]) => [SCORE_KEY_MAP[k], v])
+    );
+    // 目標は実績より少し高め（デモ用）
+    const offsets = { 国語: 4, 数学: 3, 英語: 6, 理科: 3, 社会: 5 };
+    const goalSubjects = Object.fromEntries(
+      SUBJECTS.map(sub => [sub, Math.min(100, resultSubjects[sub] + offsets[sub])])
+    );
+    const goalTotal = SUBJECTS.reduce((s, sub) => s + goalSubjects[sub], 0);
+
+    const taskSrc = STUDENT_TASKS[idx % STUDENT_TASKS.length];
+    const tasks = Object.fromEntries(
+      SUBJECTS.map(sub => [
+        sub,
+        (taskSrc[sub] || []).map((text, j) => ({ id: `${idx}-${i}-${sub}-${j}`, text, done: j < Math.ceil((taskSrc[sub].length * (i + 1)) / 3) })),
+      ])
+    );
+
+    return {
+      id: i + 1,
+      name: exam.name,
+      date: exam.date,
+      goalTotal,
+      goalSubjects,
+      resultSubjects,
+      tasks,
+      mistakes: i === student.regularExams.length - 1 ? STUDENT_MISTAKES[idx % STUDENT_MISTAKES.length] : Object.fromEntries(SUBJECTS.map(s => [s, []])),
+    };
+  });
+}
+
 // ── 先生ビュー ───────────────────────────────────────────────────────────────
-function TeacherView({ exams }) {
+function TeacherView({ exams: sharedExams }) {
+  const [selectedStudentId, setSelectedStudentId] = useState(null);
+  const [selectedExamId, setSelectedExamId]       = useState(1);
+  const [detailTab, setDetailTab]                 = useState('scores'); // 'scores' | 'tasks' | 'mistakes'
+
+  const selectedStudent = studentList.find(s => s.id === selectedStudentId);
+  const studentExams    = selectedStudent ? buildStudentExams(selectedStudent, studentList.indexOf(selectedStudent)) : [];
+  const currentExam     = studentExams.find(e => e.id === selectedExamId) || studentExams[0];
+
+  // 詳細ビュー
+  if (selectedStudent && currentExam) {
+    const totalGoal   = SUBJECTS.reduce((s, sub) => s + currentExam.goalSubjects[sub],   0);
+    const totalResult = SUBJECTS.reduce((s, sub) => s + currentExam.resultSubjects[sub], 0);
+    const allMistakes = SUBJECTS.flatMap(sub => currentExam.mistakes[sub].map(m => ({ ...m, subject: sub })));
+    const allTasks    = SUBJECTS.flatMap(sub => currentExam.tasks[sub].map(t => ({ ...t, subject: sub })));
+
+    return (
+      <div className="space-y-4 max-w-4xl mx-auto">
+        {/* ヘッダー */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <button
+            onClick={() => setSelectedStudentId(null)}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-3"
+          >
+            <ChevronLeft className="w-4 h-4" />生徒一覧に戻る
+          </button>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xl font-bold text-gray-800">{selectedStudent.name}</div>
+              <div className="text-sm text-gray-500 mt-0.5">
+                {selectedStudent.grade} {selectedStudent.class} ／ {selectedStudent.stream} ／ {selectedStudent.targetUniversity} {selectedStudent.targetFaculty}
+              </div>
+              {selectedStudent.note && (
+                <div className="text-xs text-gray-400 mt-1 max-w-md">{selectedStudent.note}</div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Stat label="テスト数" value={studentExams.length} total={null} color="purple" />
+              <Stat label="振り返り問題" value={allMistakes.length} total={null} color="red" />
+              <Stat label="タスク完了" value={allTasks.filter(t => t.done).length} total={allTasks.length} color="green" />
+            </div>
+          </div>
+        </div>
+
+        {/* テスト選択 */}
+        <div className="flex flex-wrap gap-2">
+          {studentExams.map(exam => (
+            <button
+              key={exam.id}
+              onClick={() => { setSelectedExamId(exam.id); setDetailTab('scores'); }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                selectedExamId === exam.id
+                  ? 'bg-primary-600 text-white shadow-sm'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:border-primary-400'
+              }`}
+            >
+              {exam.name}
+            </button>
+          ))}
+        </div>
+
+        {/* サマリーカード */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="text-xs text-amber-500 mb-1">目標合計</div>
+            <div className="text-2xl font-bold text-amber-700">{totalGoal}<span className="text-sm font-normal ml-1">点</span></div>
+          </div>
+          <div className={`border rounded-xl p-4 ${totalResult >= totalGoal ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <div className={`text-xs mb-1 ${totalResult >= totalGoal ? 'text-green-500' : 'text-red-500'}`}>実績合計</div>
+            <div className={`text-2xl font-bold ${totalResult >= totalGoal ? 'text-green-700' : 'text-red-700'}`}>
+              {totalResult}<span className="text-sm font-normal ml-1">点</span>
+            </div>
+            <div className={`text-xs mt-1 ${totalResult >= totalGoal ? 'text-green-500' : 'text-red-500'}`}>
+              {totalResult >= totalGoal ? `+${totalResult - totalGoal}` : `${totalResult - totalGoal}`}点
+            </div>
+          </div>
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+            <div className="text-xs text-purple-500 mb-1">振り返り問題</div>
+            <div className="text-2xl font-bold text-purple-700">
+              {currentExam.mistakes ? SUBJECTS.reduce((s, sub) => s + currentExam.mistakes[sub].length, 0) : 0}
+              <span className="text-sm font-normal ml-1">問</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 詳細タブ */}
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          {[
+            { id: 'scores',   label: '目標・実績', icon: Target   },
+            { id: 'tasks',    label: 'やること',   icon: CheckCircle },
+            { id: 'mistakes', label: '振り返り',   icon: BookOpen },
+          ].map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setDetailTab(id)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                detailTab === id ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Icon className="w-4 h-4" /><span className="hidden sm:inline">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* 目標・実績タブ */}
+        {detailTab === 'scores' && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="grid grid-cols-[90px_1fr_72px_72px_72px] gap-2 px-4 py-2 bg-gray-50 text-xs font-medium text-gray-400 border-b border-gray-100">
+              <div>科目</div>
+              <div className="pl-2">目標 → 実績</div>
+              <div className="text-center text-amber-500">目標</div>
+              <div className="text-center text-green-600">実績</div>
+              <div className="text-center text-gray-500">差</div>
+            </div>
+            {SUBJECTS.map(subject => {
+              const st     = STYLES[subject];
+              const goal   = currentExam.goalSubjects[subject];
+              const result = currentExam.resultSubjects[subject];
+              const delta  = result - goal;
+              return (
+                <div key={subject} className="grid grid-cols-[90px_1fr_72px_72px_72px] gap-2 px-4 py-3 items-center border-b border-gray-50 last:border-0">
+                  <div className={`flex items-center gap-1.5 text-sm font-medium ${st.text}`}>
+                    <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: st.hex }} />
+                    {subject}
+                  </div>
+                  {/* 目標・実績バー */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-amber-500 w-5 shrink-0">目標</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-2">
+                        <div className="bg-amber-400 h-2 rounded-full" style={{ width: `${goal}%` }} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-green-600 w-5 shrink-0">実績</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-2">
+                        <div className={`h-2 rounded-full ${result >= goal ? 'bg-green-500' : 'bg-red-400'}`} style={{ width: `${result}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-center text-sm font-medium text-amber-600">{goal}</div>
+                  <div className={`text-center text-sm font-semibold ${result >= goal ? 'text-green-600' : 'text-red-500'}`}>{result}</div>
+                  <div className={`text-center text-sm font-semibold flex items-center justify-center gap-0.5 ${delta >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {delta < 0 && <AlertTriangle className="w-3 h-3" />}
+                    {delta > 0 ? `+${delta}` : delta}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* やることリストタブ */}
+        {detailTab === 'tasks' && (
+          <div className="space-y-3">
+            {SUBJECTS.map(subject => {
+              const tasks = currentExam.tasks[subject];
+              const st    = STYLES[subject];
+              const done  = tasks.filter(t => t.done).length;
+              return (
+                <div key={subject} className={`rounded-xl border ${st.border} overflow-hidden`}>
+                  <div className={`flex items-center justify-between px-4 py-2.5 ${st.bg}`}>
+                    <div className={`font-medium text-sm ${st.text} flex items-center gap-2`}>
+                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: st.hex }} />
+                      {subject}
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full bg-white border ${st.border} ${st.text}`}>
+                      {done}/{tasks.length} 完了
+                    </span>
+                  </div>
+                  <div className="bg-white divide-y divide-gray-50">
+                    {tasks.length === 0
+                      ? <div className="px-4 py-3 text-xs text-gray-400 text-center">タスク未登録</div>
+                      : tasks.map(task => (
+                        <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
+                          {task.done
+                            ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                            : <Circle className="w-4 h-4 text-gray-300 shrink-0" />}
+                          <span className={`text-sm ${task.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.text}</span>
+                        </div>
+                      ))
+                    }
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* 振り返り問題タブ */}
+        {detailTab === 'mistakes' && (
+          <div className="space-y-3">
+            {SUBJECTS.map(subject => {
+              const mistakes = currentExam.mistakes[subject];
+              const st = STYLES[subject];
+              return (
+                <div key={subject} className={`rounded-xl border ${st.border} overflow-hidden`}>
+                  <div className={`flex items-center justify-between px-4 py-2.5 ${st.bg}`}>
+                    <div className={`font-medium text-sm ${st.text} flex items-center gap-2`}>
+                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: st.hex }} />
+                      {subject}
+                      <span className="text-xs font-normal opacity-70">({mistakes.length}問)</span>
+                    </div>
+                  </div>
+                  <div className="bg-white divide-y divide-gray-50">
+                    {mistakes.length === 0
+                      ? <div className="px-4 py-3 text-xs text-gray-400 text-center">振り返り問題なし</div>
+                      : mistakes.map(m => (
+                        <div key={m.id} className="px-4 py-3">
+                          <div className="text-sm text-gray-700">Q. {m.question}</div>
+                          <div className="text-xs text-gray-500 mt-1 pl-3 border-l-2 border-gray-200">A. {m.answer}</div>
+                        </div>
+                      ))
+                    }
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 一覧ビュー
   return (
     <div className="space-y-4 max-w-4xl mx-auto">
       <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-2">
         <Users className="w-5 h-5 text-purple-500" />
         <h2 className="font-semibold text-gray-700">生徒の定期テスト入力状況</h2>
+        <span className="ml-auto text-xs text-gray-400">クリックで詳細を確認</span>
       </div>
 
       <div className="space-y-3">
         {studentList.map((student, idx) => {
-          // デモ用: 生徒ごとに入力状況を少し変化させる
-          const offset = idx * 0.3;
-          const goalsCount   = exams.filter((_, i) => (i + offset) % 1.5 < 1).length;
-          const resultsCount = exams.filter((_, i) => (i + offset) % 2   < 1).length;
-          const mistakes = exams.reduce((sum, e) => sum + SUBJECTS.reduce((s2, sub) => s2 + e.mistakes[sub].length, 0), 0);
+          const sExams       = buildStudentExams(student, idx);
+          const goalsCount   = sExams.filter(e => e.goalTotal > 0).length;
+          const resultsCount = sExams.filter(e => SUBJECTS.some(sub => e.resultSubjects[sub] > 0)).length;
+          const mistakeCount = sExams.reduce((sum, e) => sum + SUBJECTS.reduce((s2, sub) => s2 + e.mistakes[sub].length, 0), 0);
+          const latestExam   = sExams[sExams.length - 1];
+          const latestTotal  = latestExam ? SUBJECTS.reduce((s, sub) => s + latestExam.resultSubjects[sub], 0) : 0;
+          const latestGoal   = latestExam ? latestExam.goalTotal : 0;
+          const latestDelta  = latestTotal - latestGoal;
 
           return (
-            <div key={student.id} className="bg-white rounded-xl border border-gray-200 p-4">
+            <button
+              key={student.id}
+              onClick={() => { setSelectedStudentId(student.id); setSelectedExamId(1); setDetailTab('scores'); }}
+              className="w-full text-left bg-white rounded-xl border border-gray-200 p-4 hover:border-primary-400 hover:shadow-sm transition-all"
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div className="font-semibold text-gray-800">{student.name}</div>
+                  <div className="font-semibold text-gray-800 flex items-center gap-2">
+                    {student.name}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-normal ${
+                      latestDelta >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                    }`}>
+                      直近 {latestDelta > 0 ? `+${latestDelta}` : latestDelta}点
+                    </span>
+                  </div>
                   <div className="text-xs text-gray-500 mt-0.5">
                     {student.grade} {student.class} ／ {student.targetUniversity} {student.targetFaculty}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Stat label="目標入力" value={goalsCount} total={exams.length} color="amber" />
-                  <Stat label="実績入力" value={resultsCount} total={exams.length} color="green" />
-                  <Stat label="振り返り" value={mistakes} total={null} color="red" />
+                <div className="flex items-center gap-2">
+                  <Stat label="目標入力" value={goalsCount}   total={sExams.length} color="amber"  />
+                  <Stat label="実績入力" value={resultsCount} total={sExams.length} color="green"  />
+                  <Stat label="振り返り" value={mistakeCount} total={null}          color="red"    />
+                  <ChevronRight className="w-4 h-4 text-gray-300 ml-1" />
                 </div>
               </div>
 
-              {/* 直近テストのスコアサマリー */}
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {exams.map(exam => {
+              {/* 各テストのスコア一覧 */}
+              <div className="mt-3 flex gap-2 overflow-x-auto">
+                {sExams.map(exam => {
                   const total = SUBJECTS.reduce((s, sub) => s + exam.resultSubjects[sub], 0);
-                  const goal  = SUBJECTS.reduce((s, sub) => s + exam.goalSubjects[sub],   0);
+                  const goal  = exam.goalTotal;
+                  const ok    = total >= goal;
                   return (
-                    <div key={exam.id} className="bg-gray-50 rounded-lg p-2 text-xs">
-                      <div className="text-gray-500 truncate">{exam.name}</div>
-                      <div className={`font-semibold mt-0.5 ${total >= goal ? 'text-green-600' : 'text-red-500'}`}>
-                        {total}点 <span className="text-gray-400 font-normal">/ 目標{goal}</span>
-                      </div>
+                    <div key={exam.id} className={`shrink-0 rounded-lg p-2.5 text-xs border ${ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                      <div className="text-gray-500 mb-1">{exam.name}</div>
+                      <div className={`font-bold text-sm ${ok ? 'text-green-700' : 'text-red-600'}`}>{total}点</div>
+                      <div className="text-gray-400">目標 {goal}</div>
                     </div>
                   );
                 })}
               </div>
-            </div>
+
+              {/* 科目別バー（直近のみ） */}
+              {latestExam && (
+                <div className="mt-3 space-y-1.5">
+                  {SUBJECTS.map(sub => {
+                    const result = latestExam.resultSubjects[sub];
+                    const goal   = latestExam.goalSubjects[sub];
+                    const st     = STYLES[sub];
+                    return (
+                      <div key={sub} className="flex items-center gap-2 text-xs">
+                        <span className={`w-8 shrink-0 ${st.text}`}>{sub}</span>
+                        <div className="flex-1 bg-gray-100 rounded-full h-1.5 relative">
+                          <div className="h-1.5 rounded-full" style={{ width: `${result}%`, background: st.hex }} />
+                          {/* 目標マーカー */}
+                          <div className="absolute top-0 h-1.5 w-0.5 bg-gray-400" style={{ left: `${goal}%` }} />
+                        </div>
+                        <span className={`w-8 text-right font-medium ${result >= goal ? 'text-green-600' : 'text-red-500'}`}>{result}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </button>
           );
         })}
       </div>
@@ -832,9 +1187,10 @@ function TeacherView({ exams }) {
 
 function Stat({ label, value, total, color }) {
   const colors = {
-    amber: 'bg-amber-50 text-amber-700',
-    green: 'bg-green-50 text-green-700',
-    red:   'bg-red-50 text-red-600',
+    amber:  'bg-amber-50 text-amber-700',
+    green:  'bg-green-50 text-green-700',
+    red:    'bg-red-50 text-red-600',
+    purple: 'bg-purple-50 text-purple-700',
   };
   return (
     <div className={`px-3 py-1.5 rounded-lg text-xs text-center ${colors[color]}`}>
