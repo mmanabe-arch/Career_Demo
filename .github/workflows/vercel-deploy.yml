@@ -18,11 +18,22 @@ jobs:
 
       - run: npm ci
 
+      - name: Build
+        run: npm run build
+
       - name: Deploy to Vercel
-        run: |
-          npx vercel --token ${{ secrets.VERCEL_TOKEN }} \
-            --yes \
-            ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
         env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::notice::VERCEL_TOKEN が未設定のため Vercel デプロイをスキップします。"
+            echo "GitHub Secrets に VERCEL_TOKEN / VERCEL_ORG_ID / VERCEL_PROJECT_ID を設定してください。"
+            exit 0
+          fi
+          PROD_FLAG=""
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            PROD_FLAG="--prod"
+          fi
+          npx vercel --token "$VERCEL_TOKEN" --yes $PROD_FLAG

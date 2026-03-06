@@ -14,6 +14,7 @@ import TutorHub from './pages/TutorHub';
 import GoalManagement from './pages/GoalManagement';
 import AlumniChat from './pages/AlumniChat';
 import StudentList from './pages/StudentList';
+import ExamManagement from './pages/ExamManagement';
 import LandingPage from './pages/LandingPage';
 import { useApp } from './context/AppContext';
 
@@ -31,12 +32,14 @@ function AppRoutes() {
           <>
             <Route path="/goals" element={<GoalManagement />} />
             <Route path="/chat" element={<Chat />} />
+            <Route path="/exam" element={<ExamManagement />} />
           </>
         )}
         {role === 'teacher' && (
           <>
             <Route path="/lecture-request" element={<LectureRequest />} />
             <Route path="/feedback" element={<Feedback />} />
+            <Route path="/exam" element={<ExamManagement />} />
           </>
         )}
         {role === 'alumni' && (

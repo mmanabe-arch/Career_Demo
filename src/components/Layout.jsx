@@ -77,6 +77,7 @@ function SubNav({ role, currentPath, navigate }) {
     { label: 'キャリア台帳', path: '/' },
     { label: '進学マップ', path: '/university-map' },
     { label: '目標管理', path: '/goals' },
+    { label: '定期テスト', path: '/exam' },
     { label: 'チャット', path: '/chat' },
     { label: 'コンテンツ', path: '/contents' },
     { label: 'LP', path: '/lp' },
@@ -84,6 +85,7 @@ function SubNav({ role, currentPath, navigate }) {
   const teacherNav = [
     { label: 'キャリア台帳', path: '/' },
     { label: '進学マップ', path: '/university-map' },
+    { label: '定期テスト', path: '/exam' },
     { label: '講演依頼', path: '/lecture-request' },
     { label: 'フィードバック管理', path: '/feedback' },
     { label: 'コンテンツ', path: '/contents' },
